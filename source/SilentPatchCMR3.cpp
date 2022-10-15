@@ -94,6 +94,56 @@ namespace Localization
 	}
 }
 
+namespace Cubes
+{
+	void** gBlankCubeTexture;
+	void** gGearCubeTextures;
+	void** gStageCubeTextures;
+
+	void** gGearCubeLayouts;
+	void** gStageCubeLayouts;
+
+	static void (*orgLoadCubeTextures)();
+	void LoadCubeTextures_AndSetUpLayouts()
+	{
+		orgLoadCubeTextures();
+
+		void* BLANK = *gBlankCubeTexture;
+
+		// Gear cubes
+		{
+			const auto& automatic = gGearCubeLayouts;
+			const auto& manual = automatic+3;
+
+			automatic[0] = gGearCubeTextures[0]; // A
+			automatic[1] = gGearCubeTextures[2]; // T
+			automatic[2] = BLANK;
+
+			manual[0] = BLANK;
+			manual[1] = gGearCubeTextures[1]; // M
+			manual[2] = gGearCubeTextures[2]; // T
+		}
+
+		// Stage cubes
+		{
+			const auto& stage1 = gStageCubeLayouts;
+			const auto& stage2 = stage1+3;
+			const auto& stage3 = stage2+3;
+			const auto& stage4 = stage3+3;
+			const auto& stage5 = stage4+3;
+			const auto& stage6 = stage5+3;
+			const auto& specialStage = stage6+3;
+
+			void* S = gStageCubeTextures[6];
+
+			// Keep stage numbers as-is
+			stage1[0] = stage2[0] = stage3[0] = stage4[0] = stage5[0] = stage6[0] = S;
+			stage1[1] = stage2[1] = stage3[1] = stage4[1] = stage5[1] = stage6[1] = S;
+			specialStage[0] = specialStage[1] = specialStage[2] = S;
+		}
+	}
+}
+
 void OnInitializeHook()
 {
 	static_assert(std::string_view(__FUNCSIG__).find("__stdcall") != std::string_view::npos, "This codebase must default to __stdcall, please change your compilation settings.");
@@ -173,6 +223,32 @@ void OnInitializeHook()
 			Nop(set_defaults.get<void>(5 + 2), 6);
 		}
 		TXN_CATCH();
+	}
+	TXN_CATCH();
+
+
+	// Restored cube layouts
+	try
+	{
+		using namespace Cubes;
+
+		void* load_cube_textures[] = {
+			get_pattern("E8 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? 8B 44 24 08 6A 0E"),
+			get_pattern("E8 ? ? ? ? A1 ? ? ? ? 85 C0 75 14"),
+		};
+
+		gBlankCubeTexture = *get_pattern<void**>("56 68 ? ? ? ? E8 ? ? ? ? 68 ? ? ? ? E8 ? ? ? ? 68", 1 + 5 + 5 + 1);
+		gGearCubeTextures = *get_pattern<void**>("BE ? ? ? ? BF 07 00 00 00 56", 1);
+		gStageCubeTextures = *get_pattern<void**>("BE ? ? ? ? BF 09 00 00 00 56", 1);
+
+		gGearCubeLayouts = *get_pattern<void**>("8B 04 95 ? ? ? ? 50 6A 00 E8 ? ? ? ? 83 E0 03 83 C0 02 50 6A 00", 3);
+		gStageCubeLayouts = *get_pattern<void**>("8B 15 ? ? ? ? A3 ? ? ? ? 89 15", 6 + 1);
+
+		ReadCall(load_cube_textures[0], orgLoadCubeTextures);
+		for (void* addr : load_cube_textures)
+		{
+			InjectHook(addr, LoadCubeTextures_AndSetUpLayouts);
+		}
 	}
 	TXN_CATCH();
 }
