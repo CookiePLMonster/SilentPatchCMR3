@@ -7,6 +7,14 @@
 #include <cstdint>
 #include <map>
 
+char GetRegistryEntryChar(LPCWSTR subKey, LPCWSTR valueName)
+{
+	wchar_t buf[12];
+	DWORD cbSize = sizeof(buf);
+	RegGetValueW(HKEY_LOCAL_MACHINE, subKey, valueName, RRF_RT_REG_SZ|RRF_ZEROONFAILURE, nullptr, buf, &cbSize);
+	return static_cast<char>(buf[0]);
+}
+
 namespace Localization
 {
 	struct LangFile
@@ -47,6 +55,12 @@ namespace Localization
 		return "";
 	}
 
+	uint32_t (*orgGetLanguageIDByCode)(char code);
+	uint32_t GetCurrentLanguageID_Patched()
+	{
+		return orgGetLanguageIDByCode(GetRegistryEntryChar(L"SOFTWARE\\CODEMASTERS\\Colin McRae Rally 3", L"LANGUAGE"));
+	}
+
 	uint32_t (*orgGetCurrentLanguageID)();
 
 	uint8_t* gCoDriverLanguage;
@@ -66,6 +80,17 @@ namespace Localization
 		SetCoDriverLanguage(orgGetCurrentLanguageID());
 
 		orgSetUnknown(a1);
+	}
+
+	void (*orgSetMeasurementSystem)(bool bImperial);
+	void SetMeasurementSystem_Defaults()
+	{
+		orgSetMeasurementSystem(orgGetCurrentLanguageID() == 0);
+	}
+
+	void SetMeasurementSystem_FromLanguage(bool)
+	{
+		SetMeasurementSystem_Defaults();
 	}
 }
 
@@ -92,31 +117,62 @@ void OnInitializeHook()
 	TXN_CATCH();
 
 
-	// Un-hardcoded co-driver language
-	// Patch will probably fail pattern matches on set_defaults when used on the English executable
 	try
 	{
 		using namespace Localization;
 
-		auto get_current_language_id = static_cast<decltype(orgGetCurrentLanguageID)>(get_pattern("6A 45 E8 ? ? ? ? C3"));
+		auto get_current_language_id = pattern("6A 45 E8 ? ? ? ? C3").get_one();
+		orgGetCurrentLanguageID = static_cast<decltype(orgGetCurrentLanguageID)>(get_current_language_id.get<void>());
 
-		auto get_codriver_language = ReadCallFrom(get_pattern("E8 ? ? ? ? 83 F8 03 77 40"));
-		auto set_defaults = pattern("A2 ? ? ? ? C6 05 ? ? ? ? 01 88 1D").get_one();
-		auto unk_on_main_menu_start = get_pattern("75 ? 6A 02 E8 ? ? ? ? 81 C4", 4);
+		// Un-hardcoded English text language
+		ReadCall(get_current_language_id.get<void>(2), orgGetLanguageIDByCode);
+		InjectHook(get_current_language_id.get<void>(), GetCurrentLanguageID_Patched, PATCH_JUMP);
 
-		orgGetCurrentLanguageID = get_current_language_id;
+		// Un-hardcoded co-driver language
+		// Patch will probably fail pattern matches on set_defaults when used on the English executable
+		try
+		{
+			auto get_codriver_language = ReadCallFrom(get_pattern("E8 ? ? ? ? 83 F8 03 77 40"));
+			auto set_defaults = pattern("A2 ? ? ? ? C6 05 ? ? ? ? 01 88 1D").get_one();
+			auto unk_on_main_menu_start = get_pattern("75 ? 6A 02 E8 ? ? ? ? 81 C4", 4);
 
-		gCoDriverLanguage = *set_defaults.get<uint8_t*>(5 + 2);
-		InjectHook(get_codriver_language, GetCoDriverLanguage, PATCH_JUMP);
+			gCoDriverLanguage = *set_defaults.get<uint8_t*>(5 + 2);
+			InjectHook(get_codriver_language, GetCoDriverLanguage, PATCH_JUMP);
 
-		//  mov bCoDriverLanguage, 1 -> mov bCoDriverLanguage, al
-		Patch(set_defaults.get<void>(5), { 0x90, 0xA2 });
-		Patch(set_defaults.get<void>(5 + 2), gCoDriverLanguage);
-		Nop(set_defaults.get<void>(5 + 6), 1);
+			//  mov bCoDriverLanguage, 1 -> mov bCoDriverLanguage, al
+			Patch(set_defaults.get<void>(5), { 0x90, 0xA2 });
+			Patch(set_defaults.get<void>(5 + 2), gCoDriverLanguage);
+			Nop(set_defaults.get<void>(5 + 6), 1);
 
-		// Unknown, called once as main menu starts
-		ReadCall(unk_on_main_menu_start, orgSetUnknown);
-		InjectHook(unk_on_main_menu_start, setUnknown_AndCoDriverLanguage);
+			// Unknown, called once as main menu starts
+			ReadCall(unk_on_main_menu_start, orgSetUnknown);
+			InjectHook(unk_on_main_menu_start, setUnknown_AndCoDriverLanguage);
+		}
+		TXN_CATCH();
+
+		// Revert measurement systems defaulting to imperial for English, metric otherwise (Polish forced metric)
+		try
+		{
+			auto set_measurement_system = get_pattern("E8 ? ? ? ? 8B 46 4C 33 C9");
+
+			void* set_system_places_to_patch[] = {
+				get_pattern("E8 ? ? ? ? E8 ? ? ? ? 50 E8 ? ? ? ? 68"),
+				get_pattern("6A 00 E8 ? ? ? ? 6A 01 E8 ? ? ? ? 5F", 2),
+				get_pattern("56 E8 ? ? ? ? 56 E8 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? 57", 1),
+			};
+
+			auto set_defaults = pattern("E8 ? ? ? ? B0 64").get_one();
+			
+			ReadCall(set_measurement_system, orgSetMeasurementSystem);
+			for (void* addr : set_system_places_to_patch)
+			{
+				InjectHook(addr, SetMeasurementSystem_FromLanguage);
+			}
+
+			InjectHook(set_defaults.get<void>(), SetMeasurementSystem_Defaults);
+			Nop(set_defaults.get<void>(5 + 2), 6);
+		}
+		TXN_CATCH();
 	}
 	TXN_CATCH();
 }
