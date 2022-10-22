@@ -4,6 +4,8 @@
 #include "Utils/MemoryMgr.h"
 #include "Utils/Patterns.h"
 
+#include "Menus.h"
+
 #include <cstdint>
 #include <map>
 
@@ -249,6 +251,32 @@ void OnInitializeHook()
 		{
 			InjectHook(addr, LoadCubeTextures_AndSetUpLayouts);
 		}
+	}
+	TXN_CATCH();
+
+
+	// Menu changes
+	try
+	{
+		auto menus = *get_pattern<MenuDefinition*>("C7 05 ? ? ? ? ? ? ? ? 89 3D ? ? ? ? 89 35", 2+4);
+		void* update_menu_entries[] = {
+			get_pattern("6A 01 E8 ? ? ? ? 5F 5E C2 08 00", 2),
+			get_pattern("E8 ? ? ? ? 6A 00 E8 ? ? ? ? E8 ? ? ? ? C2 08 00", 5 + 2),
+			get_pattern("E8 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? 50 E8 ? ? ? ? 50"),
+		};
+
+		auto set_focus_on_lang_screen = get_pattern("89 0D ? ? ? ? 66 89 35", 6);
+
+		gMenus = menus;
+
+		ReadCall(update_menu_entries[0], orgMenu_SetUpEntries);
+		for (void* addr : update_menu_entries)
+		{
+			InjectHook(addr, Menu_SetUpEntries_Patched);
+		}
+
+		// Don't override focus every time menus are updated
+		Nop(set_focus_on_lang_screen, 14);
 	}
 	TXN_CATCH();
 }
