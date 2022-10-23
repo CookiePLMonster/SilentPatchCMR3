@@ -6,6 +6,9 @@
 
 #include "Menus.h"
 
+#include <d3d9.h>
+#include <wil/com.h>
+
 #include <cstdint>
 #include <map>
 
@@ -146,6 +149,67 @@ namespace Cubes
 	}
 }
 
+namespace OcclusionQueries
+{
+	// Divide the occlusion query results by the sample count of the backbuffer
+	struct OcclusionQuery
+	{
+		// Stock fields, must not move
+		int field_0;
+		IDirect3DQuery9* m_pD3DQuery;
+		DWORD m_queryData;
+		uint32_t m_queryState;
+
+		// Added in SilentPatch
+		uint32_t m_sampleCount;
+	};
+
+	OcclusionQuery* (*orgOcclusionQuery_Create)();
+	OcclusionQuery* OcclusionQuery_Create_SilentPatch()
+	{
+		OcclusionQuery* result = orgOcclusionQuery_Create();
+		if (result != nullptr)
+		{
+			result->m_sampleCount = 0;
+		}
+		return result;
+	}
+
+	void OcclusionQuery_IssueBegin(OcclusionQuery* query)
+	{
+		query->m_queryData = 0;
+		query->m_pD3DQuery->Issue(D3DISSUE_BEGIN);
+		query->m_queryState = 1;
+
+		// Get the sample count
+		uint32_t sampleCount = 1;
+
+		wil::com_ptr_nothrow<IDirect3DDevice9> device;
+		wil::com_ptr_nothrow<IDirect3DSurface9> depthStencil;
+		if (SUCCEEDED(query->m_pD3DQuery->GetDevice(device.put())) && SUCCEEDED(device->GetDepthStencilSurface(depthStencil.put())))
+		{
+			D3DSURFACE_DESC desc;
+			if (SUCCEEDED(depthStencil->GetDesc(&desc)))
+			{
+				if (desc.MultiSampleType >= D3DMULTISAMPLE_2_SAMPLES)
+				{
+					sampleCount = static_cast<uint32_t>(desc.MultiSampleType);
+				}
+			}
+		}
+		query->m_sampleCount = sampleCount;
+	}
+
+	DWORD OcclusionQuery_GetDataScaled(OcclusionQuery* query)
+	{	
+		if (query->m_sampleCount > 1)
+		{
+			return query->m_queryData / query->m_sampleCount;
+		}
+		return query->m_queryData;
+	}
+}
+
 void OnInitializeHook()
 {
 	static_assert(std::string_view(__FUNCSIG__).find("__stdcall") != std::string_view::npos, "This codebase must default to __stdcall, please change your compilation settings.");
@@ -277,6 +341,26 @@ void OnInitializeHook()
 
 		// Don't override focus every time menus are updated
 		Nop(set_focus_on_lang_screen, 14);
+	}
+	TXN_CATCH();
+
+
+	// Fix sun flickering with multisampling enabled
+	try
+	{
+		using namespace OcclusionQueries;
+
+		auto mul_struct_size = get_pattern("C1 E0 04 50 C7 05 ? ? ? ? ? ? ? ? C7 05");
+		auto push_struct_size = get_pattern("C7 05 ? ? ? ? ? ? ? ? E8 ? ? ? ? 8B 15 ? ? ? ? 6A 00 50 6A 10", 25);
+		auto issue_begin = get_pattern("56 8B 74 24 08 8B 46 04 6A 02");
+		auto get_data = get_pattern("E8 ? ? ? ? 3B C7 89 44 24 18");
+
+		// shl eax, 4 -> imul eax, sizeof(OcclusionQuery)
+		Patch(mul_struct_size, {0x6B, 0xC0, sizeof(OcclusionQuery)});
+		Patch<uint8_t>(push_struct_size,  sizeof(OcclusionQuery));
+
+		InjectHook(issue_begin, OcclusionQuery_IssueBegin, PATCH_JUMP);
+		InjectHook(get_data, OcclusionQuery_GetDataScaled);
 	}
 	TXN_CATCH();
 }
