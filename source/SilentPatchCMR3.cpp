@@ -271,11 +271,13 @@ void OnInitializeHook()
 		try
 		{
 			auto get_codriver_language = ReadCallFrom(get_pattern("E8 ? ? ? ? 83 F8 03 77 40"));
+			auto set_codriver_language = ReadCallFrom(get_pattern("E8 ? ? ? ? 8B 4F 24"));
 			auto set_defaults = pattern("A2 ? ? ? ? C6 05 ? ? ? ? 01 88 1D").get_one();
 			auto unk_on_main_menu_start = get_pattern("75 ? 6A 02 E8 ? ? ? ? 81 C4", 4);
 
 			gCoDriverLanguage = *set_defaults.get<uint8_t*>(5 + 2);
 			InjectHook(get_codriver_language, GetCoDriverLanguage, PATCH_JUMP);
+			InjectHook(set_codriver_language, SetCoDriverLanguage, PATCH_JUMP);
 
 			//  mov bCoDriverLanguage, 1 -> mov bCoDriverLanguage, al
 			Patch(set_defaults.get<void>(5), { 0x90, 0xA2 });
