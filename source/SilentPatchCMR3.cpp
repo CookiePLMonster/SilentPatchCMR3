@@ -210,6 +210,28 @@ namespace OcclusionQueries
 	}
 }
 
+namespace Timers
+{
+	static int64_t GetQPC()
+	{
+		LARGE_INTEGER time;
+		QueryPerformanceCounter(&time);
+		return time.QuadPart;
+	}
+
+	LARGE_INTEGER* Frequency;
+	uint64_t GetTimeInMS()
+	{
+		// Calculate time in MS but with overflow avoidance
+		const int64_t curTime = GetQPC();
+		const int64_t freq = Frequency->QuadPart;
+
+		const int64_t whole = (curTime / freq) * 1000;
+		const int64_t part = (curTime % freq) * 1000 / freq;
+		return whole + part;
+	}
+}
+
 void OnInitializeHook()
 {
 	static_assert(std::string_view(__FUNCSIG__).find("__stdcall") != std::string_view::npos, "This codebase must default to __stdcall, please change your compilation settings.");
@@ -361,6 +383,19 @@ void OnInitializeHook()
 
 		InjectHook(issue_begin, OcclusionQuery_IssueBegin, PATCH_JUMP);
 		InjectHook(get_data, OcclusionQuery_GetDataScaled);
+	}
+	TXN_CATCH();
+
+
+	// Slightly more precise timers, not dividing frequency
+	try
+	{
+		using namespace Timers;
+
+		auto get_time_in_ms = Memory::ReadCallFrom(get_pattern("E8 ? ? ? ? EB 3E"));
+
+		Frequency = *reinterpret_cast<LARGE_INTEGER**>(reinterpret_cast<char*>(get_time_in_ms) + 2 + 5 + 2);
+		InjectHook(get_time_in_ms, GetTimeInMS, PATCH_JUMP);
 	}
 	TXN_CATCH();
 }
