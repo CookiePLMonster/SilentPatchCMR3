@@ -9,6 +9,7 @@
 #include <d3d9.h>
 #include <wil/com.h>
 
+#include <algorithm>
 #include <cstdint>
 #include <map>
 
@@ -210,6 +211,12 @@ namespace OcclusionQueries
 	}
 }
 
+void (*orgCalculateSunColorFromOcclusion)(float val);
+void CalculateSunColorFromOcclusion_Clamped(float val)
+{
+	orgCalculateSunColorFromOcclusion(std::clamp(val, 0.0f, 1.0f));
+}
+
 namespace Timers
 {
 	static int64_t GetQPC()
@@ -378,6 +385,7 @@ void OnInitializeHook()
 		auto push_struct_size = get_pattern("C7 05 ? ? ? ? ? ? ? ? E8 ? ? ? ? 8B 15 ? ? ? ? 6A 00 50 6A 10", 25);
 		auto issue_begin = get_pattern("56 8B 74 24 08 8B 46 04 6A 02");
 		auto get_data = get_pattern("E8 ? ? ? ? 3B C7 89 44 24 18");
+		auto calculate_color_from_occlusion = get_pattern("E8 ? ? ? ? 53 56 57 6A 03");
 
 		// shl eax, 4 -> imul eax, sizeof(OcclusionQuery)
 		Patch(mul_struct_size, {0x6B, 0xC0, sizeof(OcclusionQuery)});
@@ -385,6 +393,9 @@ void OnInitializeHook()
 
 		InjectHook(issue_begin, OcclusionQuery_IssueBegin, PATCH_JUMP);
 		InjectHook(get_data, OcclusionQuery_GetDataScaled);
+
+		ReadCall(calculate_color_from_occlusion, orgCalculateSunColorFromOcclusion);
+		InjectHook(calculate_color_from_occlusion, CalculateSunColorFromOcclusion_Clamped);
 	}
 	TXN_CATCH();
 
