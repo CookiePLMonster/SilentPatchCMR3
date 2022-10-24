@@ -1,4 +1,5 @@
 #define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
 #include <Windows.h>
 
 #include "Utils/MemoryMgr.h"
@@ -239,6 +240,59 @@ namespace Timers
 	}
 }
 
+namespace ResolutionsList
+{
+	struct MenuResolutionEntry
+	{
+		char m_displayText[64];
+		int m_width;
+		int m_height;
+		int m_refreshRate;
+		D3DFORMAT m_format;
+		D3DFORMAT m_backBufferFormat;
+		D3DFORMAT field_54;
+		int field_58;
+		int field_5C;
+		int field_60;
+		int field_64;
+	};
+	static_assert(sizeof(MenuResolutionEntry) == 104, "Wrong size: MenuResolutionEntry");
+
+	// Easiest to do this via runtime patching...
+	std::forward_list<std::pair<void*, size_t>> placesToPatch;
+
+	std::vector<MenuResolutionEntry> displayModeStorage;
+	static constexpr uint32_t RELOCATION_INITIAL_THRESHOLD = 128;
+
+	uint32_t (*orgGetDisplayModeCount)(uint32_t adapter);
+	uint32_t GetDisplayModeCount_RelocateArray(uint32_t adapter)
+	{
+		const uint32_t modeCount = orgGetDisplayModeCount(adapter);
+		const uint32_t modeCapacity = std::max(RELOCATION_INITIAL_THRESHOLD, displayModeStorage.size());
+		if (modeCount > modeCapacity)
+		{
+			if (placesToPatch.empty())
+			{
+				// Failsafe, limit to the max number of resolutions stock allocations can handle
+				return RELOCATION_INITIAL_THRESHOLD;
+			}
+
+			displayModeStorage.resize(modeCount);
+			std::byte* buf = reinterpret_cast<std::byte*>(displayModeStorage.data());
+
+			// Patch pointers, ugly but saves a lot of effort
+			auto Protect = ScopedUnprotect::UnprotectSectionOrFullModule( GetModuleHandle( nullptr ), ".text" );
+			
+			using namespace Memory;
+			for (const auto& addr : placesToPatch)
+			{
+				Patch(addr.first, buf+addr.second);
+			}
+		}
+		return modeCount;
+	}
+}
+
 void OnInitializeHook()
 {
 	static_assert(std::string_view(__FUNCSIG__).find("__stdcall") != std::string_view::npos, "This codebase must default to __stdcall, please change your compilation settings.");
@@ -409,6 +463,70 @@ void OnInitializeHook()
 
 		Frequency = *reinterpret_cast<LARGE_INTEGER**>(reinterpret_cast<char*>(get_time_in_ms) + 2 + 5 + 2);
 		InjectHook(get_time_in_ms, GetTimeInMS, PATCH_JUMP);
+	}
+	TXN_CATCH();
+
+
+	// Unlocked all resolutions and a 128 resolutions limit lifted
+	try
+	{
+		using namespace ResolutionsList;
+
+		auto check_aspect_ratio = get_pattern("8D 04 40 3B C2 74 05", 5);
+		auto get_display_mode_count = get_pattern("E8 ? ? ? ? 33 C9 3B C1 89 44 24 1C");
+
+		// Populate the list of addresses to patch with addresses and offsets
+		// Those act as "optional", don't fail the entire change if any patterns fail
+		// Instead, we'll limit the game to 128 resolutions in GetDisplayModeCount_RelocateArray 
+		try
+		{
+			// To save effort, build patterns manually
+			auto func_start = get_pattern_uintptr("8B 4C 24 18 51 55");
+			auto func_end = get_pattern_uintptr("8B 4E E8 8B 56 E4");
+			uint8_t* resolutions_list = *get_pattern<uint8_t*>("33 C9 85 C0 76 65 BF", 7) - offsetof(MenuResolutionEntry, m_format);
+
+			auto patch_field = [resolutions_list, func_start, func_end](size_t offset)
+			{
+				uint8_t* ptr = resolutions_list+offset;
+
+				const uint8_t mask[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
+				uint8_t bytes[4];
+				memcpy(bytes, &ptr, sizeof(ptr));
+
+				pattern(func_start, func_end,
+					std::basic_string_view<uint8_t>(bytes, sizeof(bytes)), std::basic_string_view<uint8_t>(mask, sizeof(mask)))
+					.for_each_result([&offset](pattern_match match)
+				{
+					placesToPatch.emplace_front(match.get<void>(0), offset);
+				});
+			};
+
+			patch_field(offsetof(MenuResolutionEntry, m_width));
+			patch_field(offsetof(MenuResolutionEntry, m_height));
+			patch_field(offsetof(MenuResolutionEntry, m_refreshRate));
+			patch_field(offsetof(MenuResolutionEntry, m_format));
+			patch_field(offsetof(MenuResolutionEntry, m_backBufferFormat));
+			patch_field(offsetof(MenuResolutionEntry, field_54));
+			patch_field(offsetof(MenuResolutionEntry, field_58));
+			patch_field(offsetof(MenuResolutionEntry, field_5C));
+			patch_field(offsetof(MenuResolutionEntry, field_60));
+			patch_field(offsetof(MenuResolutionEntry, field_64));
+
+			// GetMenuResolutionEntry
+			placesToPatch.emplace_front(get_pattern("8D 04 91 8D 04 C5 ? ? ? ? C2 08 00", 3 + 3), 0);
+		}
+		catch (const hook::txn_exception&)
+		{
+			ResolutionsList::placesToPatch.clear();
+		}
+		
+		// Allow all aspect ratios
+		Patch<uint8_t>(check_aspect_ratio, 0xEB);
+
+		// Set up for runtime patching of the hardcoded 128 resolutions list if there is a need
+		// Not likely to be used anytime soon but it'll act as a failsafe just in case
+		ReadCall(get_display_mode_count, orgGetDisplayModeCount);
+		InjectHook(get_display_mode_count, GetDisplayModeCount_RelocateArray);
 	}
 	TXN_CATCH();
 }
