@@ -6,6 +6,7 @@
 #include "Utils/MemoryMgr.h"
 #include "Utils/Patterns.h"
 
+#include "Graphics.h"
 #include "Menus.h"
 
 #include <d3d9.h>
@@ -511,6 +512,8 @@ void OnInitializeHook()
 	// Menu changes
 	try
 	{
+		extern void (*orgMenu_SetUpEntries)(int);
+
 		auto menus = *get_pattern<MenuDefinition*>("C7 05 ? ? ? ? ? ? ? ? 89 3D ? ? ? ? 89 35", 2+4);
 		void* update_menu_entries[] = {
 			get_pattern("6A 01 E8 ? ? ? ? 5F 5E C2 08 00", 2),
@@ -653,6 +656,31 @@ void OnInitializeHook()
 		// Not likely to be used anytime soon but it'll act as a failsafe just in case
 		ReadCall(get_display_mode_count, orgGetDisplayModeCount);
 		InjectHook(get_display_mode_count, GetDisplayModeCount_RelocateArray);
+	}
+	TXN_CATCH();
+
+
+	// Better widescreen support
+	try
+	{
+		// Viewports
+		try
+		{
+			auto set_aspect_ratio = get_pattern("8B 44 24 04 85 C0 75 1C");
+			auto get_resolution_width = ReadCallFrom(get_pattern("E8 ? ? ? ? 33 F6 89 44 24 28"));
+			auto get_resolution_height = ReadCallFrom(get_pattern("E8 ? ? ? ? 8D 4C 6D 00"));
+			auto viewports = *get_pattern<D3DViewport**>("8B 35 ? ? ? ? 8B C6 5F", 2);
+
+			auto set_aspect_ratios = get_pattern("83 EC 64 56 E8");
+
+			D3DViewport_SetAspectRatio = reinterpret_cast<decltype(D3DViewport_SetAspectRatio)>(set_aspect_ratio);
+			GetResolutionWidth = reinterpret_cast<decltype(GetResolutionWidth)>(get_resolution_width);
+			GetResolutionHeight = reinterpret_cast<decltype(GetResolutionHeight)>(get_resolution_height);
+			gViewports = viewports;
+
+			InjectHook(set_aspect_ratios, Graphics_Viewports_SetAspectRatios, PATCH_JUMP);
+		}
+		TXN_CATCH();
 	}
 	TXN_CATCH();
 }

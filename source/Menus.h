@@ -51,7 +51,6 @@ struct MenuDefinition
 };
 static_assert(sizeof(MenuDefinition) == 0x6A0, "Wrong size: MenuDefinition");
 
-extern void (*orgMenu_SetUpEntries)(int);
 void Menu_SetUpEntries_Patched(int languagesOnly);
 
 extern MenuDefinition* gMenus;
