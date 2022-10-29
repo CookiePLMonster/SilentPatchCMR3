@@ -1,6 +1,7 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <Windows.h>
+#include <timeapi.h>
 
 #include "Utils/MemoryMgr.h"
 #include "Utils/Patterns.h"
@@ -13,6 +14,8 @@
 #include <algorithm>
 #include <cstdint>
 #include <map>
+
+#pragma comment(lib, "winmm.lib")
 
 char GetRegistryEntryChar(LPCWSTR subKey, LPCWSTR valueName)
 {
@@ -227,16 +230,114 @@ namespace Timers
 		return time.QuadPart;
 	}
 
-	LARGE_INTEGER* Frequency;
+	static LARGE_INTEGER Frequency;
 	uint64_t GetTimeInMS()
 	{
 		// Calculate time in MS but with overflow avoidance
 		const int64_t curTime = GetQPC();
-		const int64_t freq = Frequency->QuadPart;
+		const int64_t freq = Frequency.QuadPart;
 
 		const int64_t whole = (curTime / freq) * 1000;
 		const int64_t part = (curTime % freq) * 1000 / freq;
 		return whole + part;
+	}
+
+	static LARGE_INTEGER StartQPC;
+	void Reset()
+	{
+		QueryPerformanceCounter(&StartQPC);
+
+		// To fix issues occuring with the first physics tick having a zero delta,
+		// knock the starting time off by a second. Hacky, but affects only the first physics tick/frame.
+		StartQPC.QuadPart -= Frequency.QuadPart;
+	}
+
+	void Setup()
+	{
+		QueryPerformanceFrequency(&Frequency);
+		Reset();
+	}
+
+	static DWORD WINAPI timeGetTime_NOP()
+	{
+		return 0;
+	}
+	static const auto pTimeGetTime_NOP = &timeGetTime_NOP;
+
+	static DWORD WINAPI timeGetTime_Reset()
+	{
+		Reset();
+		return 0;
+	}
+	static const auto pTimeGetTime_Reset = &timeGetTime_Reset;
+
+	static DWORD WINAPI timeGetTime_Update()
+	{
+		const int64_t curTime = GetQPC() - StartQPC.QuadPart;
+		const int64_t freq = Frequency.QuadPart;
+
+		const int64_t whole = (curTime / freq) * 1000;
+		const int64_t part = (curTime % freq) * 1000 / freq;
+		return static_cast<DWORD>(whole + part);
+	}
+	static const auto pTimeGetTime_Update = &timeGetTime_Update;
+
+	static DWORD WINAPI timeGetTime_Precise()
+	{
+		return static_cast<DWORD>(GetTimeInMS());
+	}
+
+	static void ReplaceFunction(void** funcPtr)
+	{
+		DWORD dwProtect;
+
+		VirtualProtect(funcPtr, sizeof(*funcPtr), PAGE_READWRITE, &dwProtect);
+		*funcPtr = &timeGetTime_Precise;
+		VirtualProtect(funcPtr, sizeof(*funcPtr), dwProtect, &dwProtect);
+	}
+
+	static bool RedirectImports()
+	{
+		const DWORD_PTR instance = reinterpret_cast<DWORD_PTR>(GetModuleHandle(nullptr));
+		const PIMAGE_NT_HEADERS ntHeader = reinterpret_cast<PIMAGE_NT_HEADERS>(instance + reinterpret_cast<PIMAGE_DOS_HEADER>(instance)->e_lfanew);
+
+		// Find IAT
+		PIMAGE_IMPORT_DESCRIPTOR pImports = reinterpret_cast<PIMAGE_IMPORT_DESCRIPTOR>(instance + ntHeader->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress);
+
+		for ( ; pImports->Name != 0; pImports++ )
+		{
+			if ( _stricmp(reinterpret_cast<const char*>(instance + pImports->Name), "winmm.dll") == 0 )
+			{
+				if ( pImports->OriginalFirstThunk != 0 )
+				{
+					const PIMAGE_THUNK_DATA pThunk = reinterpret_cast<PIMAGE_THUNK_DATA>(instance + pImports->OriginalFirstThunk);
+
+					for ( ptrdiff_t j = 0; pThunk[j].u1.AddressOfData != 0; j++ )
+					{
+						if ( strcmp(reinterpret_cast<PIMAGE_IMPORT_BY_NAME>(instance + pThunk[j].u1.AddressOfData)->Name, "timeGetTime") == 0 )
+						{
+							void** pAddress = reinterpret_cast<void**>(instance + pImports->FirstThunk) + j;
+							ReplaceFunction(pAddress);
+							return true;
+						}
+					}
+				}
+				else
+				{
+					void** pFunctions = reinterpret_cast<void**>(instance + pImports->FirstThunk);
+
+					for ( ptrdiff_t j = 0; pFunctions[j] != nullptr; j++ )
+					{
+						if ( pFunctions[j] == &::timeGetTime )
+						{
+							ReplaceFunction(&pFunctions[j]);
+							return true;
+						}
+					}
+				}
+			}
+		}
+		return false;
 	}
 }
 
@@ -302,6 +403,9 @@ void OnInitializeHook()
 
 	auto Protect = ScopedUnprotect::UnprotectSectionOrFullModule( GetModuleHandle( nullptr ), ".text" );
 
+	// Globally replace timeGetTime with a QPC-based timer
+	Timers::Setup();
+	Timers::RedirectImports();
 	// Added range check for localizations + new strings added in the Polish release
 	try
 	{
@@ -460,9 +564,31 @@ void OnInitializeHook()
 		using namespace Timers;
 
 		auto get_time_in_ms = Memory::ReadCallFrom(get_pattern("E8 ? ? ? ? EB 3E"));
-
-		Frequency = *reinterpret_cast<LARGE_INTEGER**>(reinterpret_cast<char*>(get_time_in_ms) + 2 + 5 + 2);
 		InjectHook(get_time_in_ms, GetTimeInMS, PATCH_JUMP);
+	}
+	TXN_CATCH();
+
+
+	// Backported fix from CMR04 for timeGetTime not having enough timer resolution for physics updates in splitscreen
+	try
+	{
+		using namespace Timers;
+
+		void* noop_gettime[] = {
+			get_pattern("74 1D FF 15", 4),
+			get_pattern("FF 15 ? ? ? ? 8B 0D ? ? ? ? 8B 15 ? ? ? ? 2B C1", 2)
+		};
+
+		auto gettime_reset = get_pattern("FF 15 ? ? ? ? 8B F8 8B D0 8B C8", 2);
+		auto gettime_update = get_pattern("FF 15 ? ? ? ? A3 ? ? ? ? E8 ? ? ? ? 83 F8 01 5D", 2);
+
+		for (void* addr : noop_gettime)
+		{
+			Patch(addr, &pTimeGetTime_NOP);
+		}
+
+		Patch(gettime_reset, &pTimeGetTime_Reset);
+		Patch(gettime_update, &pTimeGetTime_Update);
 	}
 	TXN_CATCH();
 
