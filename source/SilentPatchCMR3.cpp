@@ -714,22 +714,69 @@ void OnInitializeHook()
 	// Better widescreen support
 	try
 	{
+		auto get_resolution_width = ReadCallFrom(get_pattern("E8 ? ? ? ? 33 F6 89 44 24 28"));
+		auto get_resolution_height = ReadCallFrom(get_pattern("E8 ? ? ? ? 8D 4C 6D 00"));
+		auto get_num_players = ReadCallFrom(get_pattern("E8 ? ? ? ? 88 44 24 23"));
+
+		GetResolutionWidth = reinterpret_cast<decltype(GetResolutionWidth)>(get_resolution_width);
+		GetResolutionHeight = reinterpret_cast<decltype(GetResolutionHeight)>(get_resolution_height);
+		GetNumPlayers = reinterpret_cast<decltype(GetNumPlayers)>(get_num_players);
+
 		// Viewports
 		try
 		{
 			auto set_aspect_ratio = get_pattern("8B 44 24 04 85 C0 75 1C");
-			auto get_resolution_width = ReadCallFrom(get_pattern("E8 ? ? ? ? 33 F6 89 44 24 28"));
-			auto get_resolution_height = ReadCallFrom(get_pattern("E8 ? ? ? ? 8D 4C 6D 00"));
 			auto viewports = *get_pattern<D3DViewport**>("8B 35 ? ? ? ? 8B C6 5F", 2);
 
 			auto set_aspect_ratios = get_pattern("83 EC 64 56 E8");
 
 			D3DViewport_SetAspectRatio = reinterpret_cast<decltype(D3DViewport_SetAspectRatio)>(set_aspect_ratio);
-			GetResolutionWidth = reinterpret_cast<decltype(GetResolutionWidth)>(get_resolution_width);
-			GetResolutionHeight = reinterpret_cast<decltype(GetResolutionHeight)>(get_resolution_height);
 			gViewports = viewports;
 
 			InjectHook(set_aspect_ratios, Graphics_Viewports_SetAspectRatios, PATCH_JUMP);
+		}
+		TXN_CATCH();
+
+		// UI
+		try
+		{
+			using namespace Graphics::Patches;
+
+			extern void (*orgD3D_Initialise)(void* param);
+			extern void (*orgD3D_AfterReinitialise)(void* param);
+
+			auto initialise = get_pattern("E8 ? ? ? ? 8B 54 24 24 89 5C 24 18");
+			auto reinitialise = get_pattern("E8 ? ? ? ? 8B 15 ? ? ? ? A1 ? ? ? ? 8B 0D");
+
+			auto osd_codriver_get_ar = get_pattern("E8 ? ? ? ? 8B 94 24 ? ? ? ? 8B 84 24 ? ? ? ? 8B 0D");
+
+			auto osd_data = pattern("03 C6 8D 0C 85 ? ? ? ? 8D 04 F5 00 00 00 00").get_one();
+
+			// Constants to change
+			UI_resolutionWidthMult = *get_pattern<float*>("DF 6C 24 18 D8 0D ? ? ? ? D9 5C 24 38", 4+2);
+			UI_resolutionWidth = *get_pattern<float*>("D8 3D ? ? ? ? D9 5C 24 18", 2);
+
+			UI_TachoScreenScale[0] = get_pattern<int32_t>("B9 ? ? ? ? D9 5C 24 0C", 1);
+			UI_TachoScreenScale[1] = get_pattern<int32_t>("B9 ? ? ? ? 8D 3C B6", 1);
+			UI_TachoPosX = *get_pattern<float*>("D8 E2 D8 0D ? ? ? ? D8 0D", 2+2);
+
+
+			UI_CoutdownPosXHorizontal = get_pattern<int32_t>("B8 ? ? ? ? 6A 01 6A 00 68", 1);
+			UI_CoutdownPosXVertical[0] = get_pattern<int32_t>("B8 ? ? ? ? B9 ? ? ? ? EB 1F E8", 1);
+			UI_CoutdownPosXVertical[1] = get_pattern<int32_t>("76 0C B8 ? ? ? ? B9", 2+1);
+
+			orgOSDData = *osd_data.get<OSD_Data*>(2+3);
+			orgOSDData2 = *osd_data.get<OSD_Data2*>(27+3);
+
+			ReadCall(initialise, orgD3D_Initialise);
+			InjectHook(initialise, D3D_Initialise_RecalculateUI);
+
+			ReadCall(reinitialise, orgD3D_AfterReinitialise);
+			InjectHook(reinitialise, D3D_AfterReinitialise_RecalculateUI);
+
+			InjectHook(osd_codriver_get_ar, D3DViewport_GetAspectRatioForCoDriver);
+
+			OSD_Main_SetUpStructsForWidescreen();
 		}
 		TXN_CATCH();
 	}
