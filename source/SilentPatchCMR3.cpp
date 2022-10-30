@@ -181,9 +181,22 @@ namespace OcclusionQueries
 		return result;
 	}
 
+	static bool OcclusionQuery_UpdateInternal(OcclusionQuery* query)
+	{
+		if (query->m_queryState == 2)
+		{
+			DWORD data;
+			if (query->m_pD3DQuery->GetData(&data, sizeof(data), 0) == S_OK)
+			{
+				query->m_queryData = data;
+				query->m_queryState = 3;
+			}
+		}
+		return query->m_queryState == 3;
+	}
+
 	void OcclusionQuery_IssueBegin(OcclusionQuery* query)
 	{
-		query->m_queryData = 0;
 		query->m_pD3DQuery->Issue(D3DISSUE_BEGIN);
 		query->m_queryState = 1;
 
@@ -206,6 +219,12 @@ namespace OcclusionQueries
 		query->m_sampleCount = sampleCount;
 	}
 
+	void OcclusionQuery_IssueEnd(OcclusionQuery* query)
+	{
+		query->m_pD3DQuery->Issue(D3DISSUE_END);
+		query->m_queryState = 2;
+	}
+
 	DWORD OcclusionQuery_GetDataScaled(OcclusionQuery* query)
 	{	
 		if (query->m_sampleCount > 1)
@@ -213,6 +232,24 @@ namespace OcclusionQueries
 			return query->m_queryData / query->m_sampleCount;
 		}
 		return query->m_queryData;
+	}
+
+	// Checks if query is completed, returns a fake state and a cached result if it's not
+	uint32_t OcclusionQuery_UpdateStateIfFinished(OcclusionQuery* query)
+	{
+		if (!OcclusionQuery_UpdateInternal(query))
+		{
+			// Fake result, don't store it. OcclusionQuery_GetDataScaled will return old data
+			return 3;
+		}
+		return query->m_queryState;
+	}
+
+	// Returns 3 when idle, 0 otherwise - to reduce the amount of assembly patches needed
+	uint32_t OcclusionQuery_IsIdle(OcclusionQuery* query)
+	{
+		OcclusionQuery_UpdateInternal(query);
+		return query->m_queryState == 0 || query->m_queryState == 3 ? 3 : 0;
 	}
 }
 
@@ -537,7 +574,7 @@ void OnInitializeHook()
 	TXN_CATCH();
 
 
-	// Fix sun flickering with multisampling enabled
+	// Fix sun flickering with multisampling enabled, and make it fully async to avoid a GPU flush and stutter every time sun shows onscreen
 	try
 	{
 		using namespace OcclusionQueries;
@@ -545,7 +582,13 @@ void OnInitializeHook()
 		auto mul_struct_size = get_pattern("C1 E0 04 50 C7 05 ? ? ? ? ? ? ? ? C7 05");
 		auto push_struct_size = get_pattern("C7 05 ? ? ? ? ? ? ? ? E8 ? ? ? ? 8B 15 ? ? ? ? 6A 00 50 6A 10", 25);
 		auto issue_begin = get_pattern("56 8B 74 24 08 8B 46 04 6A 02");
+		auto issue_end = get_pattern("56 8B 74 24 08 8B 46 04 8B 08");
 		auto get_data = get_pattern("E8 ? ? ? ? 3B C7 89 44 24 18");
+		auto update_state_if_finished = get_pattern("E8 ? ? ? ? 83 F8 03 75 EF");
+
+		auto is_query_idle = pattern("E8 ? ? ? ? 83 F8 03 74 10").get_one();
+		auto issue_query_return = get_pattern("E8 ? ? ? ? 8B C3 5F", 5);
+
 		auto calculate_color_from_occlusion = get_pattern("E8 ? ? ? ? 53 56 57 6A 03");
 
 		// shl eax, 4 -> imul eax, sizeof(OcclusionQuery)
@@ -553,7 +596,15 @@ void OnInitializeHook()
 		Patch<uint8_t>(push_struct_size,  sizeof(OcclusionQuery));
 
 		InjectHook(issue_begin, OcclusionQuery_IssueBegin, PATCH_JUMP);
+		InjectHook(issue_end, OcclusionQuery_IssueEnd, PATCH_JUMP);
 		InjectHook(get_data, OcclusionQuery_GetDataScaled);
+		InjectHook(update_state_if_finished, OcclusionQuery_UpdateStateIfFinished);
+
+		// while (D3DQuery_UpdateState(pOcclusionQuery) != 3 && D3DQuery_UpdateState(pOcclusionQuery))
+		// ->
+		// if (!OcclusionQuery_IsIdle(pOcclusionQuery)) return 1;
+		InjectHook(is_query_idle.get<void>(0), OcclusionQuery_IsIdle);
+		InjectHook(is_query_idle.get<void>(5 + 3 + 2), issue_query_return, PATCH_JUMP);
 
 		ReadCall(calculate_color_from_occlusion, orgCalculateSunColorFromOcclusion);
 		InjectHook(calculate_color_from_occlusion, CalculateSunColorFromOcclusion_Clamped);
