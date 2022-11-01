@@ -432,6 +432,23 @@ namespace ResolutionsList
 	}
 }
 
+namespace HalfPixel
+{
+	void (*orgDrawSolidBackground)(float* verts, uint32_t numVerts);
+	void DrawSolidBackground_HalfPixelOffset(float* verts, uint32_t numVerts)
+	{
+		for (uint32_t i = 0; i < numVerts; i++)
+		{
+			float* vert = &verts[9 * i];
+			vert[4] -= 0.5f;
+			vert[5] -= 0.5f;
+			vert[6] -= 0.5f;
+			vert[7] -= 0.5f;
+		}
+		orgDrawSolidBackground(verts, numVerts);
+	}
+}
+
 void OnInitializeHook()
 {
 	static_assert(std::string_view(__FUNCSIG__).find("__stdcall") != std::string_view::npos, "This codebase must default to __stdcall, please change your compilation settings.");
@@ -707,6 +724,19 @@ void OnInitializeHook()
 		// Not likely to be used anytime soon but it'll act as a failsafe just in case
 		ReadCall(get_display_mode_count, orgGetDisplayModeCount);
 		InjectHook(get_display_mode_count, GetDisplayModeCount_RelocateArray);
+	}
+	TXN_CATCH();
+
+
+	// Fixed half pixel issues on solid backgrounds
+	try
+	{
+		using namespace HalfPixel;
+
+		auto draw_solid_background = get_pattern("D9 5C 24 58 DD D8 E8", 6);
+
+		ReadCall(draw_solid_background, orgDrawSolidBackground);
+		InjectHook(draw_solid_background, DrawSolidBackground_HalfPixelOffset);
 	}
 	TXN_CATCH();
 
