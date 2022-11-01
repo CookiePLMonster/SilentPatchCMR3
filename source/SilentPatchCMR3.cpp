@@ -721,6 +721,7 @@ void OnInitializeHook()
 		GetResolutionWidth = reinterpret_cast<decltype(GetResolutionWidth)>(get_resolution_width);
 		GetResolutionHeight = reinterpret_cast<decltype(GetResolutionHeight)>(get_resolution_height);
 		GetNumPlayers = reinterpret_cast<decltype(GetNumPlayers)>(get_num_players);
+		gDefaultViewport = *get_pattern<D3DViewport**>("A1 ? ? ? ? D9 44 24 08 D9 58 1C", 1);
 
 		// Viewports
 		try
@@ -728,12 +729,23 @@ void OnInitializeHook()
 			auto set_aspect_ratio = get_pattern("8B 44 24 04 85 C0 75 1C");
 			auto viewports = *get_pattern<D3DViewport**>("8B 35 ? ? ? ? 8B C6 5F", 2);
 
+			auto set_viewport = ReadCallFrom(get_pattern("E8 ? ? ? ? 8B 4C 24 0C 8B 56 60"));
 			auto set_aspect_ratios = get_pattern("83 EC 64 56 E8");
+
+			auto recalc_fov = pattern("D8 0D ? ? ? ? DA 74 24 30 ").get_one();
 
 			D3DViewport_SetAspectRatio = reinterpret_cast<decltype(D3DViewport_SetAspectRatio)>(set_aspect_ratio);
 			gViewports = viewports;
 
+			InjectHook(set_viewport, D3DViewport_Set, PATCH_JUMP);
 			InjectHook(set_aspect_ratios, Graphics_Viewports_SetAspectRatios, PATCH_JUMP);
+
+			// Change the horizontal FOV instead of vertical when refreshing viewports
+			// fidiv -> fidivr and m_vertFov -> m_horFov
+			static const float f4By3 = 3.0f/4.0f;
+			Patch(recalc_fov.get<void>(2), &f4By3);
+			Patch<uint8_t>(recalc_fov.get<void>(6+1), 0x7C);
+			Patch<uint8_t>(recalc_fov.get<void>(10+2), 0x1C);
 		}
 		TXN_CATCH();
 
@@ -760,10 +772,12 @@ void OnInitializeHook()
 			UI_TachoScreenScale[1] = get_pattern<int32_t>("B9 ? ? ? ? 8D 3C B6", 1);
 			UI_TachoPosX = *get_pattern<float*>("D8 E2 D8 0D ? ? ? ? D8 0D", 2+2);
 
-
 			UI_CoutdownPosXHorizontal = get_pattern<int32_t>("B8 ? ? ? ? 6A 01 6A 00 68", 1);
 			UI_CoutdownPosXVertical[0] = get_pattern<int32_t>("B8 ? ? ? ? B9 ? ? ? ? EB 1F E8", 1);
 			UI_CoutdownPosXVertical[1] = get_pattern<int32_t>("76 0C B8 ? ? ? ? B9", 2+1);
+
+			UI_MenuBarWidth = get_pattern<int32_t>("68 ? ? ? ? E8 ? ? ? ? BA ? ? ? ? 2B D0 52", 1);
+			UI_MenuBarTextDrawLimit = get_pattern<int32_t>("C7 44 24 2C 01 00 00 00 81 FD", 8+2);
 
 			orgOSDData = *osd_data.get<OSD_Data*>(2+3);
 			orgOSDData2 = *osd_data.get<OSD_Data2*>(27+3);

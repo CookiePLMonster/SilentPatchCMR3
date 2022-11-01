@@ -3,6 +3,32 @@
 #include <cstddef>
 #include <cstdint>
 
+struct D3DViewport
+{
+	int m_handle;
+	int field_4;
+	int field_8;
+	int m_left;
+	int m_top;
+	int m_right;
+	int m_bottom;
+	float m_horFov;
+	float m_vertFov;
+	int field_24;
+	float m_leftScale;
+	float m_topScale;
+	float m_rightScale;
+	float m_bottomScale;
+	int field_38;
+	int field_3C;
+	int field_40;
+	std::byte gap44[16];
+	struct IDirect3DSurface9 *m_pRenderTarget;
+	struct IDirect3DSurface9 *m_pDepthStencil;
+	int field_5C;
+};
+static_assert(sizeof(D3DViewport) == 0x60, "Wrong size: D3DViewport");
+
 struct OSD_Data
 {
 	const char *field_0;
@@ -52,8 +78,6 @@ struct OSD_Data2
 };
 static_assert(sizeof(OSD_Data2) == 0x8C, "Wrong size: OSD_Data2");
 
-struct D3DViewport;
-
 inline void (*D3DViewport_SetAspectRatio)(D3DViewport* viewport, float hfov, float vfov);
 inline uint32_t (*GetResolutionWidth)();
 inline uint32_t (*GetResolutionHeight)();
@@ -61,6 +85,7 @@ inline uint32_t (*GetResolutionHeight)();
 inline int32_t (*GetNumPlayers)();
 
 inline D3DViewport** gViewports;
+inline D3DViewport** gDefaultViewport;
 
 void Graphics_Viewports_SetAspectRatios();
 
@@ -69,6 +94,8 @@ void OSD_CoDriver_LoadGraphics();
 
 void D3D_Initialise_RecalculateUI(void* param);
 void D3D_AfterReinitialise_RecalculateUI(void* param);
+
+void D3DViewport_Set(D3DViewport* viewport, int left, int top, int right, int bottom);	
 
 void D3DViewport_GetAspectRatioForCoDriver(D3DViewport *viewport, float* horFov, float* vertFov);
 
@@ -82,6 +109,9 @@ namespace Graphics::Patches
 
 	inline int32_t* UI_CoutdownPosXHorizontal;
 	inline int32_t* UI_CoutdownPosXVertical[2];
+
+	inline int32_t* UI_MenuBarWidth;
+	inline int32_t* UI_MenuBarTextDrawLimit;
 
 	inline OSD_Data* orgOSDData;
 	inline OSD_Data2* orgOSDData2;

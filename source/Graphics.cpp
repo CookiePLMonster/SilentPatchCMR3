@@ -103,6 +103,9 @@ static void RecalculateUI()
 
 		*UI_CoutdownPosXHorizontal = centered(292);
 		*UI_CoutdownPosXVertical[0] = *UI_CoutdownPosXVertical[1] = centeredHalf(146);
+
+		*UI_MenuBarWidth = ScalesResWidthInt;
+		*UI_MenuBarTextDrawLimit = static_cast<int32_t>(ScaledResWidth * 1.4375f + 1.0f); // Original magic constant, 921 for 640px
 	}
 
 	// Update OSD data
@@ -133,6 +136,28 @@ void D3D_AfterReinitialise_RecalculateUI(void* param)
 {
 	orgD3D_AfterReinitialise(param);
 	RecalculateUI();
+}
+
+void D3DViewport_Set(D3DViewport* viewport, int left, int top, int right, int bottom)
+{
+	if (viewport == nullptr)
+	{
+		viewport = *gDefaultViewport;
+	}
+
+	const int32_t ResWidth = GetResolutionWidth();
+	const int32_t ResHeight = GetResolutionHeight();
+
+	viewport->m_left = left;
+	viewport->m_top = top;
+	viewport->m_right = right;
+	viewport->m_bottom = bottom;
+	viewport->m_horFov = (4.0f * bottom) / (3.0f * right);
+	viewport->m_leftScale = static_cast<float>(left) / ResWidth;
+	viewport->m_topScale = static_cast<float>(top) / ResHeight;
+	viewport->m_rightScale = static_cast<float>(right) / ResWidth;
+	viewport->m_bottomScale = static_cast<float>(bottom) / ResHeight;
+	viewport->m_vertFov = 4.0f/3.0f;
 }
 
 void D3DViewport_GetAspectRatioForCoDriver(D3DViewport* /*viewport*/, float* horFov, float* vertFov)
