@@ -787,12 +787,31 @@ void OnInitializeHook()
 			extern void (*orgD3D_Initialise)(void* param);
 			extern void (*orgD3D_AfterReinitialise)(void* param);
 
+			DrawSolidRectangle = reinterpret_cast<decltype(DrawSolidRectangle)>(get_pattern("6A 01 E8 ? ? ? ? 6A 05 E8 ? ? ? ? 6A 06 E8 ? ? ? ? DB 44 24 5C", -5));
+
 			auto initialise = get_pattern("E8 ? ? ? ? 8B 54 24 24 89 5C 24 18");
 			auto reinitialise = get_pattern("E8 ? ? ? ? 8B 15 ? ? ? ? A1 ? ? ? ? 8B 0D");
 
 			auto osd_codriver_get_ar = get_pattern("E8 ? ? ? ? 8B 94 24 ? ? ? ? 8B 84 24 ? ? ? ? 8B 0D");
 
 			auto osd_data = pattern("03 C6 8D 0C 85 ? ? ? ? 8D 04 F5 00 00 00 00").get_one();
+
+			void* osd_element_init_center[] = {
+				get_pattern("52 50 E8 ? ? ? ? A1 ? ? ? ? C7 86", 2),
+				get_pattern("E8 ? ? ? ? 68 ? ? ? ? C7 05 ? ? ? ? ? ? ? ? E8 ? ? ? ? 5E"),
+			};
+			
+			void* osd_element_init_right[] = {
+				get_pattern("E8 ? ? ? ? 33 C0 6A 01"),
+				get_pattern("E8 ? ? ? ? 8B 0D ? ? ? ? 33 C0 81 E1"),
+				get_pattern("68 ? ? ? ? E8 ? ? ? ? 5F 5E 5D C7 05", 5),
+			};
+
+			void* solid_background_full_width[] = {
+				get_pattern("2B D0 52 6A 00 E8 ? ? ? ? C2 08 00", 5),
+				get_pattern("68 4E 01 00 00 6A 00 E8 ? ? ? ? C2 04 00", 7),
+				get_pattern("68 64 01 00 00 6A 00 E8 ? ? ? ? C2 04 00", 7),
+			};
 
 			// Constants to change
 			UI_resolutionWidthMult = *get_pattern<float*>("DF 6C 24 18 D8 0D ? ? ? ? D9 5C 24 38", 4+2);
@@ -806,11 +825,12 @@ void OnInitializeHook()
 			UI_CoutdownPosXVertical[0] = get_pattern<int32_t>("B8 ? ? ? ? B9 ? ? ? ? EB 1F E8", 1);
 			UI_CoutdownPosXVertical[1] = get_pattern<int32_t>("76 0C B8 ? ? ? ? B9", 2+1);
 
-			UI_MenuBarWidth = get_pattern<int32_t>("68 ? ? ? ? E8 ? ? ? ? BA ? ? ? ? 2B D0 52", 1);
 			UI_MenuBarTextDrawLimit = get_pattern<int32_t>("C7 44 24 2C 01 00 00 00 81 FD", 8+2);
 
 			orgOSDData = *osd_data.get<OSD_Data*>(2+3);
 			orgOSDData2 = *osd_data.get<OSD_Data2*>(27+3);
+
+			orgStartLightData = *get_pattern<Object_StartLight*>("8D 34 8D ? ? ? ? 89 74 24 0C", 3);
 
 			ReadCall(initialise, orgD3D_Initialise);
 			InjectHook(initialise, D3D_Initialise_RecalculateUI);
@@ -819,6 +839,21 @@ void OnInitializeHook()
 			InjectHook(reinitialise, D3D_AfterReinitialise_RecalculateUI);
 
 			InjectHook(osd_codriver_get_ar, D3DViewport_GetAspectRatioForCoDriver);
+
+			for (void* addr : osd_element_init_center)
+			{
+				InjectHook(addr, OSD_Element_Init_Center);
+			}
+
+			for (void* addr : osd_element_init_right)
+			{
+				InjectHook(addr, OSD_Element_Init_RightAlign);
+			}
+
+			for (void* addr : solid_background_full_width)
+			{
+				InjectHook(addr, DrawSolidRectangle_FullWidth);
+			}
 
 			OSD_Main_SetUpStructsForWidescreen();
 		}

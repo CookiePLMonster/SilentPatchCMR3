@@ -78,14 +78,69 @@ struct OSD_Data2
 };
 static_assert(sizeof(OSD_Data2) == 0x8C, "Wrong size: OSD_Data2");
 
+struct OSD_Element
+{
+	int field_0;
+	std::byte gap4[20];
+	int field_18;
+	int field_1C;
+	std::byte gap20[8];
+	int field_28;
+	int field_2C;
+	int m_posX;
+	int m_posY;
+	int m_width;
+	int m_height;
+	int field_40;
+	int field_44;
+	int field_48;
+	std::byte gap4C[4];
+	int (*m_drawFunc)(int, int);
+	int field_54;
+	std::byte gap58[4];
+	int field_5C;
+};
+static_assert(sizeof(OSD_Element) == 0x60, "Wrong size: OSD_Element");
+
+struct Object_StartLight
+{
+	int m_posX;
+	int m_posY;
+	int m_width;
+	int m_height;
+	int field_10;
+	int field_14;
+	int field_18;
+	int field_1C;
+	int field_20;
+	int field_24;
+	int field_28;
+	int field_2C;
+	int field_30;
+	int field_34;
+	int field_38;
+	int field_3C;
+	std::byte gap40[28];
+};
+static_assert(sizeof(Object_StartLight) == 0x5C, "Wrong size: Object_StartLight");
+
+
+OSD_Element* OSD_Element_Init_Center(OSD_Element* element, int posX, int posY, int width, int height, int a6, int a7, int a8, int a9, int a10, int a11);
+OSD_Element* OSD_Element_Init_RightAlign(OSD_Element* element, int posX, int posY, int width, int height, int a6, int a7, int a8, int a9, int a10, int a11);
+OSD_Element* OSD_Element_Init(OSD_Element* element, int posX, int posY, int width, int height, int a6, int a7, int a8, int a9, int a10, int a11);
+
 inline void (*D3DViewport_SetAspectRatio)(D3DViewport* viewport, float hfov, float vfov);
 inline uint32_t (*GetResolutionWidth)();
 inline uint32_t (*GetResolutionHeight)();
+
+inline void (*DrawSolidRectangle)(int posX, int posY, int width, int height, int color);
 
 inline int32_t (*GetNumPlayers)();
 
 inline D3DViewport** gViewports;
 inline D3DViewport** gDefaultViewport;
+
+void DrawSolidRectangle_FullWidth(int posX, int posY, int width, int height, int color);
 
 void Graphics_Viewports_SetAspectRatios();
 
@@ -110,9 +165,9 @@ namespace Graphics::Patches
 	inline int32_t* UI_CoutdownPosXHorizontal;
 	inline int32_t* UI_CoutdownPosXVertical[2];
 
-	inline int32_t* UI_MenuBarWidth;
 	inline int32_t* UI_MenuBarTextDrawLimit;
 
 	inline OSD_Data* orgOSDData;
 	inline OSD_Data2* orgOSDData2;
+	inline Object_StartLight* orgStartLightData;
 }

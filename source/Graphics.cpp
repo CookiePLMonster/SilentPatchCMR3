@@ -4,6 +4,48 @@
 
 using namespace Graphics::Patches;
 
+OSD_Element* OSD_Element_Init_Center(OSD_Element* element, int posX, int posY, int width, int height, int a6, int a7, int a8, int a9, int a10, int a11)
+{
+	const float aspectRatio = static_cast<float>(GetResolutionWidth()) / GetResolutionHeight();
+	const float scaledWidth = 480.0f * aspectRatio;
+	const int offset = posX - 320;
+	return OSD_Element_Init(element, static_cast<int>(scaledWidth / 2 + offset), posY, width, height, a6, a7, a8, a9, a10, a11);
+}
+
+OSD_Element* OSD_Element_Init_RightAlign(OSD_Element* element, int posX, int posY, int width, int height, int a6, int a7, int a8, int a9, int a10, int a11)
+{
+	const float aspectRatio = static_cast<float>(GetResolutionWidth()) / GetResolutionHeight();
+	const float scaledWidth = 480.0f * aspectRatio;
+	const int offset = 640 - posX;
+	return OSD_Element_Init(element, static_cast<int>(scaledWidth - offset), posY, width, height, a6, a7, a8, a9, a10, a11);
+}
+
+OSD_Element* OSD_Element_Init(OSD_Element* element, int posX, int posY, int width, int height, int a6, int a7, int a8, int a9, int a10, int a11)
+{
+	element->field_0 = 0;
+	element->field_40 = 0;
+	element->field_44 = 0;
+	element->field_48 = 0;
+	element->m_posY = posY;
+	element->m_posX = posX;
+	element->m_height = height;
+	element->m_width = width;
+	element->field_18 = a7;
+	element->field_54 = a6;
+	element->field_28 = a9;
+	element->field_1C = a8;
+	element->field_5C = a11;
+	element->field_2C = a10;
+	return element;
+}
+
+void DrawSolidRectangle_FullWidth(int posX, int posY, int /*width*/, int height, int color)
+{
+	const float aspectRatio = static_cast<float>(GetResolutionWidth()) / GetResolutionHeight();
+	const float scaledWidth = 480.0f * aspectRatio;
+	DrawSolidRectangle(posX, posY, static_cast<int>(scaledWidth + 1), height, color);
+}
+
 void Graphics_Viewports_SetAspectRatios()
 {
 	const float Width = static_cast<float>(GetResolutionWidth());
@@ -56,10 +98,12 @@ void Graphics_Viewports_SetAspectRatios()
 
 static OSD_Data OSD_DataOriginal[4];
 static OSD_Data2 OSD_Data2Original[4];
+static Object_StartLight Object_StartLightOriginal[2];
 void OSD_Main_SetUpStructsForWidescreen()
 {
 	memcpy(OSD_DataOriginal, orgOSDData, sizeof(OSD_DataOriginal));
 	memcpy(OSD_Data2Original, orgOSDData2, sizeof(OSD_Data2Original));
+	memcpy(Object_StartLightOriginal, orgStartLightData, sizeof(Object_StartLightOriginal));
 }
 
 static float gAspectRatioMult;
@@ -104,7 +148,6 @@ static void RecalculateUI()
 		*UI_CoutdownPosXHorizontal = centered(292);
 		*UI_CoutdownPosXVertical[0] = *UI_CoutdownPosXVertical[1] = centeredHalf(146);
 
-		*UI_MenuBarWidth = ScalesResWidthInt;
 		*UI_MenuBarTextDrawLimit = static_cast<int32_t>(ScaledResWidth * 1.4375f + 1.0f); // Original magic constant, 921 for 640px
 	}
 
@@ -121,6 +164,12 @@ static void RecalculateUI()
 		{
 			orgOSDData2[i].m_CoDriverX = centeredHalf(OSD_Data2Original[i].m_CoDriverX);
 		}
+	}
+
+	// Update start lights data
+	for (size_t i = 0; i < 2; i++)
+	{
+		orgStartLightData[i].m_posX = centered(Object_StartLightOriginal[i].m_posX);
 	}
 }
 
