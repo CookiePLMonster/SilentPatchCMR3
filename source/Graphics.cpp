@@ -149,6 +149,17 @@ static void RecalculateUI()
 		*UI_CoutdownPosXVertical[0] = *UI_CoutdownPosXVertical[1] = centeredHalf(146);
 
 		*UI_MenuBarTextDrawLimit = static_cast<int32_t>(ScaledResWidth * 1.4375f + 1.0f); // Original magic constant, 921 for 640px
+
+		// Menus, right column, default - 393 (640 - 247)
+		for (const auto& item : UI_MenuRightColumnOffsets)
+		{
+			std::visit([&](const auto& val)
+			{
+				*val.first = right(val.second);
+			}, item);
+		}
+
+		*UI_MenuActiveElementPosX[0] = *UI_MenuActiveElementPosX[1] = ScalesResWidthInt;
 	}
 
 	// Update OSD data

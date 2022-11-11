@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <map>
+#include <vector>
 
 #pragma comment(lib, "winmm.lib")
 
@@ -398,7 +399,7 @@ namespace ResolutionsList
 	static_assert(sizeof(MenuResolutionEntry) == 104, "Wrong size: MenuResolutionEntry");
 
 	// Easiest to do this via runtime patching...
-	std::forward_list<std::pair<void*, size_t>> placesToPatch;
+	std::vector<std::pair<void*, size_t>> placesToPatch;
 
 	std::vector<MenuResolutionEntry> displayModeStorage;
 	static constexpr uint32_t RELOCATION_INITIAL_THRESHOLD = 128;
@@ -694,7 +695,7 @@ void OnInitializeHook()
 					std::basic_string_view<uint8_t>(bytes, sizeof(bytes)), std::basic_string_view<uint8_t>(mask, sizeof(mask)))
 					.for_each_result([&offset](pattern_match match)
 				{
-					placesToPatch.emplace_front(match.get<void>(0), offset);
+					placesToPatch.emplace_back(match.get<void>(0), offset);
 				});
 			};
 
@@ -710,12 +711,13 @@ void OnInitializeHook()
 			patch_field(offsetof(MenuResolutionEntry, field_64));
 
 			// GetMenuResolutionEntry
-			placesToPatch.emplace_front(get_pattern("8D 04 91 8D 04 C5 ? ? ? ? C2 08 00", 3 + 3), 0);
+			placesToPatch.emplace_back(get_pattern("8D 04 91 8D 04 C5 ? ? ? ? C2 08 00", 3 + 3), 0);
 		}
 		catch (const hook::txn_exception&)
 		{
 			ResolutionsList::placesToPatch.clear();
 		}
+		ResolutionsList::placesToPatch.shrink_to_fit();
 		
 		// Allow all aspect ratios
 		Patch<uint8_t>(check_aspect_ratio, 0xEB);
@@ -827,6 +829,47 @@ void OnInitializeHook()
 
 			UI_MenuBarTextDrawLimit = get_pattern<int32_t>("C7 44 24 2C 01 00 00 00 81 FD", 8+2);
 
+			auto patch_field = [](std::string_view str, ptrdiff_t offset)
+			{
+				pattern(str).for_each_result([offset](pattern_match match)
+				{
+					int32_t* const addr = match.get<int32_t>(offset);
+					const int32_t val = *addr;
+					UI_MenuRightColumnOffsets.emplace_back(std::in_place_type<Int32Patch>, addr, val);
+				});
+			};
+
+			patch_field("05 89 01 00 00", 1); // add eax, 393
+			patch_field("81 C5 89 01 00 00", 2); // add ebp, 393
+			patch_field("81 C3 89 01 00 00", 2); // add ebx, 393
+			patch_field("81 C7 89 01 00 00", 2); // add edi, 393
+			patch_field("81 C6 89 01 00 00", 2); // add esi, 393
+
+			// push 393
+			patch_field("68 89 01 00 00 68 ? ? ? ? 6A 00", 1);
+			UI_MenuRightColumnOffsets.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("6A 09 51 68 89 01 00 00", 3 + 1), 393);
+
+			// Menu arrows
+			UI_MenuRightColumnOffsets.emplace_back(std::in_place_type<FloatPatch>, *get_pattern<float*>("D8 0D ? ? ? ? F3 A5 D9 5C 24 2C", 2), 376.0f);
+			pattern("C7 44 24 ? 00 00 BC 43").count(2).for_each_result([](pattern_match match)
+			{
+				UI_MenuRightColumnOffsets.emplace_back(std::in_place_type<FloatPatch>, match.get<float>(4), 376.0f);
+			});
+			UI_MenuRightColumnOffsets.emplace_back(std::in_place_type<FloatPatch>, get_pattern<float>("C7 44 24 ? 00 80 BA 43", 4), 376.0f - 3.0f);
+			UI_MenuRightColumnOffsets.emplace_back(std::in_place_type<FloatPatch>, get_pattern<float>("C7 84 24 ? ? ? ? 00 80 BA 43", 7), 376.0f - 3.0f);
+			UI_MenuRightColumnOffsets.emplace_back(std::in_place_type<FloatPatch>, get_pattern<float>("C7 44 24 ? 00 00 BE 43", 4), 376.0f + 3.0f);
+			UI_MenuRightColumnOffsets.emplace_back(std::in_place_type<FloatPatch>, get_pattern<float>("C7 84 24 ? ? ? ? 00 00 BE 43", 7), 376.0f + 3.0f);
+
+			// Controls screen menu
+			UI_MenuRightColumnOffsets.emplace_back(std::in_place_type<FloatPatch>, get_pattern<float>("68 00 00 7F 43 52 56", 1), 255.0f);
+			patch_field("81 C6 FF 00 00 00", 2); // add esi, 255
+			patch_field("81 C3 FF 00 00 00", 2); // add ebx, 255
+			UI_MenuRightColumnOffsets.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("56 68 FF 00 00 00 68", 2), 255);
+
+			auto active_element_posx = pattern("BA 80 02 00 00 2B D0").count(std::size(UI_MenuActiveElementPosX));
+			UI_MenuActiveElementPosX[0] = active_element_posx.get(0).get<int32_t>(1);
+			UI_MenuActiveElementPosX[1] = active_element_posx.get(1).get<int32_t>(1);
+
 			orgOSDData = *osd_data.get<OSD_Data*>(2+3);
 			orgOSDData2 = *osd_data.get<OSD_Data2*>(27+3);
 
@@ -857,7 +900,11 @@ void OnInitializeHook()
 
 			OSD_Main_SetUpStructsForWidescreen();
 		}
-		TXN_CATCH();
+		catch (const hook::txn_exception&)
+		{
+			Graphics::Patches::UI_MenuRightColumnOffsets.clear();
+		}
+		Graphics::Patches::UI_MenuRightColumnOffsets.shrink_to_fit();
 	}
 	TXN_CATCH();
 }

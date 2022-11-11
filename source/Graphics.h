@@ -2,6 +2,8 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <variant>
+#include <vector>
 
 struct D3DViewport
 {
@@ -166,8 +168,13 @@ namespace Graphics::Patches
 	inline int32_t* UI_CoutdownPosXVertical[2];
 
 	inline int32_t* UI_MenuBarTextDrawLimit;
+	inline int32_t* UI_MenuActiveElementPosX[2];
 
 	inline OSD_Data* orgOSDData;
 	inline OSD_Data2* orgOSDData2;
 	inline Object_StartLight* orgStartLightData;
+
+	using Int32Patch = std::pair<int32_t*, int32_t>;
+	using FloatPatch = std::pair<float*, float>;
+	inline std::vector<std::variant<Int32Patch, FloatPatch>> UI_MenuRightColumnOffsets;
 }
