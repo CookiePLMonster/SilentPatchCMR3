@@ -790,6 +790,8 @@ void OnInitializeHook()
 			extern void (*orgD3D_AfterReinitialise)(void* param);
 
 			DrawSolidRectangle = reinterpret_cast<decltype(DrawSolidRectangle)>(get_pattern("6A 01 E8 ? ? ? ? 6A 05 E8 ? ? ? ? 6A 06 E8 ? ? ? ? DB 44 24 5C", -5));
+			DrawString = reinterpret_cast<decltype(DrawString)>(get_pattern("8B 74 24 30 8B 0D", -6));
+			SetStringExtents = reinterpret_cast<decltype(SetStringExtents)>(get_pattern("56 83 F8 FE", -6));
 
 			auto initialise = get_pattern("E8 ? ? ? ? 8B 54 24 24 89 5C 24 18");
 			auto reinitialise = get_pattern("E8 ? ? ? ? 8B 15 ? ? ? ? A1 ? ? ? ? 8B 0D");
@@ -835,7 +837,7 @@ void OnInitializeHook()
 				{
 					int32_t* const addr = match.get<int32_t>(offset);
 					const int32_t val = *addr;
-					UI_MenuRightColumnOffsets.emplace_back(std::in_place_type<Int32Patch>, addr, val);
+					UI_RightAlignElements.emplace_back(std::in_place_type<Int32Patch>, addr, val);
 				});
 			};
 
@@ -847,28 +849,64 @@ void OnInitializeHook()
 
 			// push 393
 			patch_field("68 89 01 00 00 68 ? ? ? ? 6A 00", 1);
-			UI_MenuRightColumnOffsets.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("6A 09 51 68 89 01 00 00", 3 + 1), 393);
+			UI_RightAlignElements.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("6A 09 51 68 89 01 00 00", 3 + 1), 393);
 
 			// Menu arrows
-			UI_MenuRightColumnOffsets.emplace_back(std::in_place_type<FloatPatch>, *get_pattern<float*>("D8 0D ? ? ? ? F3 A5 D9 5C 24 2C", 2), 376.0f);
+			UI_RightAlignElements.emplace_back(std::in_place_type<FloatPatch>, *get_pattern<float*>("D8 0D ? ? ? ? F3 A5 D9 5C 24 2C", 2), 376.0f);
 			pattern("C7 44 24 ? 00 00 BC 43").count(2).for_each_result([](pattern_match match)
 			{
-				UI_MenuRightColumnOffsets.emplace_back(std::in_place_type<FloatPatch>, match.get<float>(4), 376.0f);
+				UI_RightAlignElements.emplace_back(std::in_place_type<FloatPatch>, match.get<float>(4), 376.0f);
 			});
-			UI_MenuRightColumnOffsets.emplace_back(std::in_place_type<FloatPatch>, get_pattern<float>("C7 44 24 ? 00 80 BA 43", 4), 376.0f - 3.0f);
-			UI_MenuRightColumnOffsets.emplace_back(std::in_place_type<FloatPatch>, get_pattern<float>("C7 84 24 ? ? ? ? 00 80 BA 43", 7), 376.0f - 3.0f);
-			UI_MenuRightColumnOffsets.emplace_back(std::in_place_type<FloatPatch>, get_pattern<float>("C7 44 24 ? 00 00 BE 43", 4), 376.0f + 3.0f);
-			UI_MenuRightColumnOffsets.emplace_back(std::in_place_type<FloatPatch>, get_pattern<float>("C7 84 24 ? ? ? ? 00 00 BE 43", 7), 376.0f + 3.0f);
+			UI_RightAlignElements.emplace_back(std::in_place_type<FloatPatch>, get_pattern<float>("C7 44 24 ? 00 80 BA 43", 4), 376.0f - 3.0f);
+			UI_RightAlignElements.emplace_back(std::in_place_type<FloatPatch>, get_pattern<float>("C7 84 24 ? ? ? ? 00 80 BA 43", 7), 376.0f - 3.0f);
+			UI_RightAlignElements.emplace_back(std::in_place_type<FloatPatch>, get_pattern<float>("C7 44 24 ? 00 00 BE 43", 4), 376.0f + 3.0f);
+			UI_RightAlignElements.emplace_back(std::in_place_type<FloatPatch>, get_pattern<float>("C7 84 24 ? ? ? ? 00 00 BE 43", 7), 376.0f + 3.0f);
 
 			// Controls screen menu
-			UI_MenuRightColumnOffsets.emplace_back(std::in_place_type<FloatPatch>, get_pattern<float>("68 00 00 7F 43 52 56", 1), 255.0f);
+			UI_RightAlignElements.emplace_back(std::in_place_type<FloatPatch>, get_pattern<float>("68 00 00 7F 43 52 56", 1), 255.0f);
 			patch_field("81 C6 FF 00 00 00", 2); // add esi, 255
 			patch_field("81 C3 FF 00 00 00", 2); // add ebx, 255
-			UI_MenuRightColumnOffsets.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("56 68 FF 00 00 00 68", 2), 255);
+			UI_RightAlignElements.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("56 68 FF 00 00 00 68", 2), 255);
 
-			auto active_element_posx = pattern("BA 80 02 00 00 2B D0").count(std::size(UI_MenuActiveElementPosX));
-			UI_MenuActiveElementPosX[0] = active_element_posx.get(0).get<int32_t>(1);
-			UI_MenuActiveElementPosX[1] = active_element_posx.get(1).get<int32_t>(1);
+			// Championship standings pre-race
+			void* race_standings[] = {
+				get_pattern("E8 ? ? ? ? 6A 00 6A 00 6A 00 6A 00 6A FF E8 ? ? ? ? 33 ED"),
+				get_pattern("E8 ? ? ? ? 55 E8 ? ? ? ? 50 E8 ? ? ? ? 8D 8C 24"),
+				get_pattern("E8 ? ? ? ? 6A 0C 8D 54 24 38"),
+				get_pattern("52 6A 00 E8 ? ? ? ? 55", 3),
+				get_pattern("68 ? ? ? ? 52 6A 00 E8 ? ? ? ? 6A 00", 8),
+			};
+
+			void* race_standings_extents[] = {
+				get_pattern("6A FE E8 ? ? ? ? E8 ? ? ? ? 25 ? ? ? ? 50 68", 2),
+				get_pattern("E8 ? ? ? ? 8D 55 01"),
+			};
+			
+			// Championship standings pre-championship + unknown
+			void* champ_standings1[] = {
+				get_pattern("E8 ? ? ? ? 55 E8 ? ? ? ? 50 E8 ? ? ? ? 8D 4C 24 64"),
+				get_pattern("51 6A 00 E8 ? ? ? ? 55 E8 ? ? ? ? 50", 3),
+				get_pattern("6A 00 E8 ? ? ? ? 55 E8 ? ? ? ? 50 E8 ? ? ? ? 8D 4C 24 60", 2),
+				get_pattern("50 6A 00 E8 ? ? ? ? 55", 3),
+				get_pattern("E8 ? ? ? ? 6A 00 6A 00 6A 00 6A 00 6A FF E8 ? ? ? ? 5E 83 C4 08"),
+			};
+			auto champ_standings2 = pattern("68 EA 01 00 00 50 6A 00 E8").count(2);
+			
+			void* champ_standings_extents[] = {
+				get_pattern("6A FE E8 ? ? ? ? 8D 45 01", 2),
+				get_pattern("E8 ? ? ? ? 8D 4D 01 51"),
+				get_pattern("6A FE E8 ? ? ? ? E8 ? ? ? ? 25 ? ? ? ? 50 E8", 2),
+			};
+
+			void* champ_standings_redbar[] = {
+				get_pattern("E8 ? ? ? ? EB 05 BB"),
+				get_pattern("68 ? ? ? ? E8 ? ? ? ? EB 08", 5),
+			};
+
+			pattern("BA 80 02 00 00 2B D0").count(2).for_each_result([](pattern_match match)
+			{
+				UI_RightAlignElements.emplace_back(std::in_place_type<Int32Patch>, match.get<int32_t>(1), 640);
+			});
 
 			orgOSDData = *osd_data.get<OSD_Data*>(2+3);
 			orgOSDData2 = *osd_data.get<OSD_Data2*>(27+3);
@@ -898,13 +936,39 @@ void OnInitializeHook()
 				InjectHook(addr, DrawSolidRectangle_FullWidth);
 			}
 
+			for (void* addr : race_standings)
+			{
+				InjectHook(addr, DrawString_RightAlign);
+			}
+			for (void* addr : race_standings_extents)
+			{
+				InjectHook(addr, SetStringExtents_FullWidth);
+			}
+			for (void* addr : champ_standings1)
+			{
+				InjectHook(addr, DrawString_RightAlign);
+			}
+			champ_standings2.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(8), DrawString_RightAlign);
+			});
+
+			for (void* addr : champ_standings_extents)
+			{
+				InjectHook(addr, SetStringExtents_FullWidth);
+			}
+			for (void* addr : champ_standings_redbar)
+			{
+				InjectHook(addr, DrawSolidRectangle_RightAlign);
+			}
+
 			OSD_Main_SetUpStructsForWidescreen();
 		}
 		catch (const hook::txn_exception&)
 		{
-			Graphics::Patches::UI_MenuRightColumnOffsets.clear();
+			Graphics::Patches::UI_RightAlignElements.clear();
 		}
-		Graphics::Patches::UI_MenuRightColumnOffsets.shrink_to_fit();
+		Graphics::Patches::UI_RightAlignElements.shrink_to_fit();
 	}
 	TXN_CATCH();
 }

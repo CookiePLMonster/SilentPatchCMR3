@@ -136,6 +136,9 @@ inline uint32_t (*GetResolutionWidth)();
 inline uint32_t (*GetResolutionHeight)();
 
 inline void (*DrawSolidRectangle)(int posX, int posY, int width, int height, int color);
+inline void (*DrawString)(uint8_t a1, const char* text, int posX, int posY, int a5, char a6);
+
+inline void (*SetStringExtents)(int a1, int x1, int y1, int x2, int y2);
 
 inline int32_t (*GetNumPlayers)();
 
@@ -143,6 +146,11 @@ inline D3DViewport** gViewports;
 inline D3DViewport** gDefaultViewport;
 
 void DrawSolidRectangle_FullWidth(int posX, int posY, int width, int height, int color);
+void DrawSolidRectangle_RightAlign(int posX, int posY, int width, int height, int color);
+void DrawString_Center(uint8_t a1, const char* text, int posX, int posY, int a5, char a6);
+void DrawString_RightAlign(uint8_t a1, const char* text, int posX, int posY, int a5, char a6);
+
+void SetStringExtents_FullWidth(int a1, int x1, int y1, int x2, int y2);
 
 void Graphics_Viewports_SetAspectRatios();
 
@@ -168,7 +176,6 @@ namespace Graphics::Patches
 	inline int32_t* UI_CoutdownPosXVertical[2];
 
 	inline int32_t* UI_MenuBarTextDrawLimit;
-	inline int32_t* UI_MenuActiveElementPosX[2];
 
 	inline OSD_Data* orgOSDData;
 	inline OSD_Data2* orgOSDData2;
@@ -176,5 +183,6 @@ namespace Graphics::Patches
 
 	using Int32Patch = std::pair<int32_t*, int32_t>;
 	using FloatPatch = std::pair<float*, float>;
-	inline std::vector<std::variant<Int32Patch, FloatPatch>> UI_MenuRightColumnOffsets;
+	inline std::vector<std::variant<Int32Patch, FloatPatch>> UI_CenteredElements;
+	inline std::vector<std::variant<Int32Patch, FloatPatch>> UI_RightAlignElements;
 }

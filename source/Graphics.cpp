@@ -46,6 +46,37 @@ void DrawSolidRectangle_FullWidth(int posX, int posY, int /*width*/, int height,
 	DrawSolidRectangle(posX, posY, static_cast<int>(scaledWidth + 1), height, color);
 }
 
+void DrawSolidRectangle_RightAlign(int posX, int posY, int width, int height, int color)
+{
+	const float aspectRatio = static_cast<float>(GetResolutionWidth()) / GetResolutionHeight();
+	const float scaledWidth = 480.0f * aspectRatio;
+	const int offset = 640 - posX;
+	DrawSolidRectangle(static_cast<int>(scaledWidth - offset), posY, width + 1, height, color);
+}
+
+void DrawString_Center(uint8_t a1, const char* text, int posX, int posY, int a5, char a6)
+{
+	const float aspectRatio = static_cast<float>(GetResolutionWidth()) / GetResolutionHeight();
+	const float scaledWidth = 480.0f * aspectRatio;
+	const int offset = posX - 320;
+	DrawString(a1, text, static_cast<int>(scaledWidth / 2 + offset), posY, a5, a6);
+}
+
+void DrawString_RightAlign(uint8_t a1, const char* text, int posX, int posY, int a5, char a6)
+{
+	const float aspectRatio = static_cast<float>(GetResolutionWidth()) / GetResolutionHeight();
+	const float scaledWidth = 480.0f * aspectRatio;
+	const int offset = 640 - posX;
+	DrawString(a1, text, static_cast<int>(scaledWidth - offset), posY, a5, a6);
+}
+
+void SetStringExtents_FullWidth(int a1, int x1, int y1, int /*x2*/, int y2)
+{
+	const float aspectRatio = static_cast<float>(GetResolutionWidth()) / GetResolutionHeight();
+	const float scaledWidth = 480.0f * aspectRatio;
+	SetStringExtents(a1, x1, y1, static_cast<int>(scaledWidth + 1), y2);
+}
+
 void Graphics_Viewports_SetAspectRatios()
 {
 	const float Width = static_cast<float>(GetResolutionWidth());
@@ -150,16 +181,22 @@ static void RecalculateUI()
 
 		*UI_MenuBarTextDrawLimit = static_cast<int32_t>(ScaledResWidth * 1.4375f + 1.0f); // Original magic constant, 921 for 640px
 
+		for (const auto& item : UI_CenteredElements)
+		{
+			std::visit([&](const auto& val)
+			{
+				*val.first = centered(val.second);
+			}, item);
+		}
+
 		// Menus, right column, default - 393 (640 - 247)
-		for (const auto& item : UI_MenuRightColumnOffsets)
+		for (const auto& item : UI_RightAlignElements)
 		{
 			std::visit([&](const auto& val)
 			{
 				*val.first = right(val.second);
 			}, item);
 		}
-
-		*UI_MenuActiveElementPosX[0] = *UI_MenuActiveElementPosX[1] = ScalesResWidthInt;
 	}
 
 	// Update OSD data
