@@ -793,6 +793,9 @@ void OnInitializeHook()
 			DrawString = reinterpret_cast<decltype(DrawString)>(get_pattern("8B 74 24 30 8B 0D", -6));
 			SetStringExtents = reinterpret_cast<decltype(SetStringExtents)>(get_pattern("56 83 F8 FE", -6));
 
+			D3D_DrawRectangles = reinterpret_cast<decltype(D3D_DrawRectangles)>(ReadCallFrom(get_pattern("E8 ? ? ? ? 8D 44 24 68")));
+			D3D_DrawLines = reinterpret_cast<decltype(D3D_DrawLines)>(get_pattern("F7 D8 57", -0x14));
+
 			auto initialise = get_pattern("E8 ? ? ? ? 8B 54 24 24 89 5C 24 18");
 			auto reinitialise = get_pattern("E8 ? ? ? ? 8B 15 ? ? ? ? A1 ? ? ? ? 8B 0D");
 
@@ -908,6 +911,23 @@ void OnInitializeHook()
 				UI_RightAlignElements.emplace_back(std::in_place_type<Int32Patch>, match.get<int32_t>(1), 640);
 			});
 
+			// Championship loading screen
+			void* new_championship_loading_screen_text[] = {
+				get_pattern("6A 0C E8 ? ? ? ? EB 04", 2),
+				get_pattern("E8 ? ? ? ? 8B 44 24 2C 8B 4C 24 18"),
+			};
+
+			void* new_championship_loading_screen_rectangles[] = {
+				get_pattern("E8 ? ? ? ? EB 02 DD D8 D9 44 24 14 D8 1D"),
+				get_pattern("E8 ? ? ? ? EB 02 DD D8 D9 44 24 14 D8 1C AD"),
+			};
+
+			void* new_championship_loading_screen_lines[] = {
+				get_pattern("DD D8 E8 ? ? ? ? D9 44 24 14", 2),
+				get_pattern("E8 ? ? ? ? B8 ? ? ? ? 33 ED"),
+				get_pattern("DD D8 E8 ? ? ? ? D9 44 24 20", 2),
+			};
+
 			orgOSDData = *osd_data.get<OSD_Data*>(2+3);
 			orgOSDData2 = *osd_data.get<OSD_Data2*>(27+3);
 
@@ -960,6 +980,19 @@ void OnInitializeHook()
 			for (void* addr : champ_standings_redbar)
 			{
 				InjectHook(addr, DrawSolidRectangle_RightAlign);
+			}
+
+			for (void* addr : new_championship_loading_screen_text)
+			{
+				InjectHook(addr, DrawString_Center);
+			}
+			for (void* addr : new_championship_loading_screen_rectangles)
+			{
+				InjectHook(addr, D3D_DrawRectangles_Center);
+			}
+			for (void* addr : new_championship_loading_screen_lines)
+			{
+				InjectHook(addr, D3D_DrawLines_Center);
 			}
 
 			OSD_Main_SetUpStructsForWidescreen();

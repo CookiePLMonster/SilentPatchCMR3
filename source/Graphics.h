@@ -135,6 +135,9 @@ inline void (*D3DViewport_SetAspectRatio)(D3DViewport* viewport, float hfov, flo
 inline uint32_t (*GetResolutionWidth)();
 inline uint32_t (*GetResolutionHeight)();
 
+inline void (*D3D_DrawRectangles)(float* data, uint32_t numRectangles);
+inline void (*D3D_DrawLines)(float* data, uint32_t numLines);
+
 inline void (*DrawSolidRectangle)(int posX, int posY, int width, int height, int color);
 inline void (*DrawString)(uint8_t a1, const char* text, int posX, int posY, int a5, char a6);
 
@@ -144,6 +147,9 @@ inline int32_t (*GetNumPlayers)();
 
 inline D3DViewport** gViewports;
 inline D3DViewport** gDefaultViewport;
+
+void D3D_DrawRectangles_Center(float* data, uint32_t numRectangles);
+void D3D_DrawLines_Center(float* data, uint32_t numLines);
 
 void DrawSolidRectangle_FullWidth(int posX, int posY, int width, int height, int color);
 void DrawSolidRectangle_RightAlign(int posX, int posY, int width, int height, int color);
@@ -155,7 +161,6 @@ void SetStringExtents_FullWidth(int a1, int x1, int y1, int x2, int y2);
 void Graphics_Viewports_SetAspectRatios();
 
 void OSD_Main_SetUpStructsForWidescreen();
-void OSD_CoDriver_LoadGraphics();
 
 void D3D_Initialise_RecalculateUI(void* param);
 void D3D_AfterReinitialise_RecalculateUI(void* param);

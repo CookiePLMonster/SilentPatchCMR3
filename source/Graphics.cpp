@@ -4,18 +4,21 @@
 
 using namespace Graphics::Patches;
 
+static float GetScaledResolutionWidth()
+{
+	return 480.0f * (static_cast<float>(GetResolutionWidth()) / GetResolutionHeight());
+}
+
 OSD_Element* OSD_Element_Init_Center(OSD_Element* element, int posX, int posY, int width, int height, int a6, int a7, int a8, int a9, int a10, int a11)
 {
-	const float aspectRatio = static_cast<float>(GetResolutionWidth()) / GetResolutionHeight();
-	const float scaledWidth = 480.0f * aspectRatio;
+	const float scaledWidth = GetScaledResolutionWidth();
 	const int offset = posX - 320;
 	return OSD_Element_Init(element, static_cast<int>(scaledWidth / 2 + offset), posY, width, height, a6, a7, a8, a9, a10, a11);
 }
 
 OSD_Element* OSD_Element_Init_RightAlign(OSD_Element* element, int posX, int posY, int width, int height, int a6, int a7, int a8, int a9, int a10, int a11)
 {
-	const float aspectRatio = static_cast<float>(GetResolutionWidth()) / GetResolutionHeight();
-	const float scaledWidth = 480.0f * aspectRatio;
+	const float scaledWidth = GetScaledResolutionWidth();
 	const int offset = 640 - posX;
 	return OSD_Element_Init(element, static_cast<int>(scaledWidth - offset), posY, width, height, a6, a7, a8, a9, a10, a11);
 }
@@ -39,41 +42,68 @@ OSD_Element* OSD_Element_Init(OSD_Element* element, int posX, int posY, int widt
 	return element;
 }
 
+void D3D_DrawRectangles_Center(float* data, uint32_t numRectangles)
+{
+	const float resolutionWidth = static_cast<float>(GetResolutionWidth());
+	const float scaledOldCenter = 320.0f * (resolutionWidth / GetScaledResolutionWidth());
+	const float scaledRealCenter = resolutionWidth / 2.0f;
+	const float offset = scaledRealCenter - scaledOldCenter;
+	for (uint32_t i = 0; i < numRectangles; ++i)
+	{
+		// Those rectangles are already multiplied for resolution
+		float* rect = &data[9 * i];
+		rect[4] += offset;
+		rect[5] += offset;
+	}
+	D3D_DrawRectangles(data, numRectangles);
+}
+
+void D3D_DrawLines_Center(float* data, uint32_t numLines)
+{
+	const float resolutionWidth = static_cast<float>(GetResolutionWidth());
+	const float scaledOldCenter = 320.0f * (resolutionWidth / GetScaledResolutionWidth());
+	const float scaledRealCenter = resolutionWidth / 2.0f;
+	const float offset = scaledRealCenter - scaledOldCenter;
+	for (uint32_t i = 0; i < numLines; ++i)
+	{
+		// Those rectangles are already multiplied for resolution
+		float* rect = &data[8 * i];
+		rect[2] += offset;
+		rect[3] += offset;
+	}
+	D3D_DrawLines(data, numLines);
+}
+
 void DrawSolidRectangle_FullWidth(int posX, int posY, int /*width*/, int height, int color)
 {
-	const float aspectRatio = static_cast<float>(GetResolutionWidth()) / GetResolutionHeight();
-	const float scaledWidth = 480.0f * aspectRatio;
+	const float scaledWidth = GetScaledResolutionWidth();
 	DrawSolidRectangle(posX, posY, static_cast<int>(scaledWidth + 1), height, color);
 }
 
 void DrawSolidRectangle_RightAlign(int posX, int posY, int width, int height, int color)
 {
-	const float aspectRatio = static_cast<float>(GetResolutionWidth()) / GetResolutionHeight();
-	const float scaledWidth = 480.0f * aspectRatio;
+	const float scaledWidth = GetScaledResolutionWidth();
 	const int offset = 640 - posX;
 	DrawSolidRectangle(static_cast<int>(scaledWidth - offset), posY, width + 1, height, color);
 }
 
 void DrawString_Center(uint8_t a1, const char* text, int posX, int posY, int a5, char a6)
 {
-	const float aspectRatio = static_cast<float>(GetResolutionWidth()) / GetResolutionHeight();
-	const float scaledWidth = 480.0f * aspectRatio;
+	const float scaledWidth = GetScaledResolutionWidth();
 	const int offset = posX - 320;
 	DrawString(a1, text, static_cast<int>(scaledWidth / 2 + offset), posY, a5, a6);
 }
 
 void DrawString_RightAlign(uint8_t a1, const char* text, int posX, int posY, int a5, char a6)
 {
-	const float aspectRatio = static_cast<float>(GetResolutionWidth()) / GetResolutionHeight();
-	const float scaledWidth = 480.0f * aspectRatio;
+	const float scaledWidth = GetScaledResolutionWidth();
 	const int offset = 640 - posX;
 	DrawString(a1, text, static_cast<int>(scaledWidth - offset), posY, a5, a6);
 }
 
 void SetStringExtents_FullWidth(int a1, int x1, int y1, int /*x2*/, int y2)
 {
-	const float aspectRatio = static_cast<float>(GetResolutionWidth()) / GetResolutionHeight();
-	const float scaledWidth = 480.0f * aspectRatio;
+	const float scaledWidth = GetScaledResolutionWidth();
 	SetStringExtents(a1, x1, y1, static_cast<int>(scaledWidth + 1), y2);
 }
 
