@@ -151,12 +151,12 @@ inline D3DViewport** gDefaultViewport;
 void D3D_DrawRectangles_Center(float* data, uint32_t numRectangles);
 void D3D_DrawLines_Center(float* data, uint32_t numLines);
 
-void DrawSolidRectangle_FullWidth(int posX, int posY, int width, int height, int color);
+void DrawSolidRectangle_Stretch(int posX, int posY, int width, int height, int color);
 void DrawSolidRectangle_RightAlign(int posX, int posY, int width, int height, int color);
 void DrawString_Center(uint8_t a1, const char* text, int posX, int posY, int a5, char a6);
 void DrawString_RightAlign(uint8_t a1, const char* text, int posX, int posY, int a5, char a6);
 
-void SetStringExtents_FullWidth(int a1, int x1, int y1, int x2, int y2);
+void SetStringExtents_Stretch(int a1, int x1, int y1, int x2, int y2);
 
 void Graphics_Viewports_SetAspectRatios();
 
@@ -169,18 +169,21 @@ void D3DViewport_Set(D3DViewport* viewport, int left, int top, int right, int bo
 
 void D3DViewport_GetAspectRatioForCoDriver(D3DViewport *viewport, float* horFov, float* vertFov);
 
+void SetMovieDirectory_SetDimensions(const char* path);
+
 namespace Graphics::Patches
 {
 	inline float* UI_resolutionWidthMult;
-	inline float* UI_resolutionWidth;
 
-	inline int32_t* UI_TachoScreenScale[2];
-	inline float* UI_TachoPosX; // -50.0f
-
-	inline int32_t* UI_CoutdownPosXHorizontal;
-	inline int32_t* UI_CoutdownPosXVertical[2];
+	inline int32_t* UI_CoutdownPosXVertical[2]; // Special cased, as it's half-center
 
 	inline int32_t* UI_MenuBarTextDrawLimit;
+
+	// Movie rendering - special cased, scretch to fill (preserving aspect ratio)
+	inline float* UI_MovieX1;
+	inline float* UI_MovieY1;
+	inline float* UI_MovieX2;
+	inline float* UI_MovieY2;
 
 	inline OSD_Data* orgOSDData;
 	inline OSD_Data2* orgOSDData2;

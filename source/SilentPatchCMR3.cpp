@@ -788,6 +788,7 @@ void OnInitializeHook()
 
 			extern void (*orgD3D_Initialise)(void* param);
 			extern void (*orgD3D_AfterReinitialise)(void* param);
+			extern void (*orgSetMovieDirectory)(const char* path);
 
 			DrawSolidRectangle = reinterpret_cast<decltype(DrawSolidRectangle)>(get_pattern("6A 01 E8 ? ? ? ? 6A 05 E8 ? ? ? ? 6A 06 E8 ? ? ? ? DB 44 24 5C", -5));
 			DrawString = reinterpret_cast<decltype(DrawString)>(get_pattern("8B 74 24 30 8B 0D", -6));
@@ -821,19 +822,6 @@ void OnInitializeHook()
 			};
 
 			// Constants to change
-			UI_resolutionWidthMult = *get_pattern<float*>("DF 6C 24 18 D8 0D ? ? ? ? D9 5C 24 38", 4+2);
-			UI_resolutionWidth = *get_pattern<float*>("D8 3D ? ? ? ? D9 5C 24 18", 2);
-
-			UI_TachoScreenScale[0] = get_pattern<int32_t>("B9 ? ? ? ? D9 5C 24 0C", 1);
-			UI_TachoScreenScale[1] = get_pattern<int32_t>("B9 ? ? ? ? 8D 3C B6", 1);
-			UI_TachoPosX = *get_pattern<float*>("D8 E2 D8 0D ? ? ? ? D8 0D", 2+2);
-
-			UI_CoutdownPosXHorizontal = get_pattern<int32_t>("B8 ? ? ? ? 6A 01 6A 00 68", 1);
-			UI_CoutdownPosXVertical[0] = get_pattern<int32_t>("B8 ? ? ? ? B9 ? ? ? ? EB 1F E8", 1);
-			UI_CoutdownPosXVertical[1] = get_pattern<int32_t>("76 0C B8 ? ? ? ? B9", 2+1);
-
-			UI_MenuBarTextDrawLimit = get_pattern<int32_t>("C7 44 24 2C 01 00 00 00 81 FD", 8+2);
-
 			auto patch_field = [](std::string_view str, ptrdiff_t offset)
 			{
 				pattern(str).for_each_result([offset](pattern_match match)
@@ -843,6 +831,19 @@ void OnInitializeHook()
 					UI_RightAlignElements.emplace_back(std::in_place_type<Int32Patch>, addr, val);
 				});
 			};
+
+			UI_resolutionWidthMult = *get_pattern<float*>("DF 6C 24 18 D8 0D ? ? ? ? D9 5C 24 38", 4+2);
+			UI_RightAlignElements.emplace_back(std::in_place_type<FloatPatch>, *get_pattern<float*>("D8 3D ? ? ? ? D9 5C 24 18", 2), 640.0f);
+
+			UI_RightAlignElements.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("B9 ? ? ? ? D9 5C 24 0C", 1), 640);
+			UI_RightAlignElements.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("B9 ? ? ? ? 8D 3C B6", 1), 640);
+			UI_RightAlignElements.emplace_back(std::in_place_type<FloatPatch>, *get_pattern<float*>("D8 E2 D8 0D ? ? ? ? D8 0D", 2+2), 590.0f);
+
+			UI_CenteredElements.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("B8 ? ? ? ? 6A 01 6A 00 68", 1), 292);
+			UI_CoutdownPosXVertical[0] = get_pattern<int32_t>("B8 ? ? ? ? B9 ? ? ? ? EB 1F E8", 1);
+			UI_CoutdownPosXVertical[1] = get_pattern<int32_t>("76 0C B8 ? ? ? ? B9", 2+1);
+
+			UI_MenuBarTextDrawLimit = get_pattern<int32_t>("C7 44 24 2C 01 00 00 00 81 FD", 8+2);
 
 			patch_field("05 89 01 00 00", 1); // add eax, 393
 			patch_field("81 C5 89 01 00 00", 2); // add ebp, 393
@@ -939,6 +940,19 @@ void OnInitializeHook()
 				get_pattern("DD D8 E8 ? ? ? ? D9 44 24 20", 2),
 			};
 
+			// Stage loading background tiles
+			UI_RightAlignElements.emplace_back(std::in_place_type<FloatPatch>, get_pattern<float>("C7 44 24 ? ? ? ? ? 89 44 24 3C 89 44 24 38", 4), 640.0f);
+			UI_RightAlignElements.emplace_back(std::in_place_type<FloatPatch>, get_pattern<float>("DF 6C 24 78 C7 44 24", 4+4), 640.0f);
+			auto rectangle_tile_draw = get_pattern("E8 ? ? ? ? 46 83 C7 04 83 FE 05");
+
+			// Movie rendering
+			auto movie_rect = pattern("C7 05 ? ? ? ? 00 00 00 BF C7 05 ? ? ? ? 00 00 00 BF").get_one();
+			auto movie_name_setdir = get_pattern("E8 ? ? ? ? E8 ? ? ? ? 85 C0 A1 ? ? ? ? 0F 95 C3");
+			UI_MovieX1 = movie_rect.get<float>(6);
+			UI_MovieY1 = movie_rect.get<float>(10 + 6);
+			UI_MovieX2 = movie_rect.get<float>(20 + 6);
+			UI_MovieY2 = movie_rect.get<float>(30 + 6);
+
 			orgOSDData = *osd_data.get<OSD_Data*>(2+3);
 			orgOSDData2 = *osd_data.get<OSD_Data2*>(27+3);
 
@@ -964,7 +978,7 @@ void OnInitializeHook()
 
 			for (void* addr : solid_background_full_width)
 			{
-				InjectHook(addr, DrawSolidRectangle_FullWidth);
+				InjectHook(addr, DrawSolidRectangle_Stretch);
 			}
 
 			for (void* addr : race_standings)
@@ -973,7 +987,7 @@ void OnInitializeHook()
 			}
 			for (void* addr : race_standings_extents)
 			{
-				InjectHook(addr, SetStringExtents_FullWidth);
+				InjectHook(addr, SetStringExtents_Stretch);
 			}
 			for (void* addr : champ_standings1)
 			{
@@ -986,11 +1000,11 @@ void OnInitializeHook()
 
 			for (void* addr : champ_standings_extents1)
 			{
-				InjectHook(addr, SetStringExtents_FullWidth);
+				InjectHook(addr, SetStringExtents_Stretch);
 			}
 			champ_standings_extents2.for_each_result([](pattern_match match)
 			{
-				InjectHook(match.get<void>(), SetStringExtents_FullWidth);
+				InjectHook(match.get<void>(), SetStringExtents_Stretch);
 			});
 			for (void* addr : champ_standings_redbar)
 			{
@@ -1010,12 +1024,19 @@ void OnInitializeHook()
 				InjectHook(addr, D3D_DrawLines_Center);
 			}
 
+			InjectHook(rectangle_tile_draw, DrawSolidRectangle_Stretch);
+
+			ReadCall(movie_name_setdir, orgSetMovieDirectory);
+			InjectHook(movie_name_setdir, SetMovieDirectory_SetDimensions);
+
 			OSD_Main_SetUpStructsForWidescreen();
 		}
 		catch (const hook::txn_exception&)
 		{
+			Graphics::Patches::UI_CenteredElements.clear();
 			Graphics::Patches::UI_RightAlignElements.clear();
 		}
+		Graphics::Patches::UI_CenteredElements.shrink_to_fit();
 		Graphics::Patches::UI_RightAlignElements.shrink_to_fit();
 	}
 	TXN_CATCH();

@@ -1,6 +1,10 @@
 #include "Graphics.h"
 
 #include "Utils/MemoryMgr.h"
+#include <cmath>
+#include <Shlwapi.h>
+
+#pragma comment(lib, "Shlwapi.lib")
 
 using namespace Graphics::Patches;
 
@@ -74,10 +78,10 @@ void D3D_DrawLines_Center(float* data, uint32_t numLines)
 	D3D_DrawLines(data, numLines);
 }
 
-void DrawSolidRectangle_FullWidth(int posX, int posY, int /*width*/, int height, int color)
+void DrawSolidRectangle_Stretch(int posX, int posY, int width, int height, int color)
 {
-	const float scaledWidth = GetScaledResolutionWidth();
-	DrawSolidRectangle(posX, posY, static_cast<int>(scaledWidth + 1), height, color);
+	const float widthScale = GetScaledResolutionWidth() / 640.0f;
+	DrawSolidRectangle(posX, posY, static_cast<int>(std::ceil(width * widthScale)), height, color);
 }
 
 void DrawSolidRectangle_RightAlign(int posX, int posY, int width, int height, int color)
@@ -101,10 +105,10 @@ void DrawString_RightAlign(uint8_t a1, const char* text, int posX, int posY, int
 	DrawString(a1, text, static_cast<int>(scaledWidth - offset), posY, a5, a6);
 }
 
-void SetStringExtents_FullWidth(int a1, int x1, int y1, int /*x2*/, int y2)
+void SetStringExtents_Stretch(int a1, int x1, int y1, int x2, int y2)
 {
-	const float scaledWidth = GetScaledResolutionWidth();
-	SetStringExtents(a1, x1, y1, static_cast<int>(scaledWidth + 1), y2);
+	const float widthScale = GetScaledResolutionWidth() / 640.0f;
+	SetStringExtents(a1, x1, y1, static_cast<int>(std::ceil(x2 * widthScale)), y2);
 }
 
 void Graphics_Viewports_SetAspectRatios()
@@ -176,7 +180,6 @@ static void RecalculateUI()
 	gAspectRatioMult = (4.0f * ResHeight) / (3.0f * ResWidth);
 
 	const float ScaledResWidth = 640.0f / gAspectRatioMult;
-	const int32_t ScalesResWidthInt = static_cast<int32_t>(ScaledResWidth);
 
 	auto centered = [ScaledResWidth](const auto& val)
 	{
@@ -201,12 +204,6 @@ static void RecalculateUI()
 		ScopedUnprotect::Section Protect2( GetModuleHandle( nullptr ), ".rdata" );
 	
 		*UI_resolutionWidthMult = gAspectRatioMult / 640.0f;
-		*UI_resolutionWidth = ScaledResWidth;
-
-		*UI_TachoScreenScale[0] = *UI_TachoScreenScale[1] = ScalesResWidthInt;
-		*UI_TachoPosX = ScaledResWidth - 50.0f;
-
-		*UI_CoutdownPosXHorizontal = centered(292);
 		*UI_CoutdownPosXVertical[0] = *UI_CoutdownPosXVertical[1] = centeredHalf(146);
 
 		*UI_MenuBarTextDrawLimit = static_cast<int32_t>(ScaledResWidth * 1.4375f + 1.0f); // Original magic constant, 921 for 640px
@@ -290,4 +287,32 @@ void D3DViewport_Set(D3DViewport* viewport, int left, int top, int right, int bo
 void D3DViewport_GetAspectRatioForCoDriver(D3DViewport* /*viewport*/, float* horFov, float* vertFov)
 {
 	*horFov = *vertFov = 1.0f;
+}
+
+void (*orgSetMovieDirectory)(const char* path);
+void SetMovieDirectory_SetDimensions(const char* path)
+{
+	// intros are pillarboxed, the rest is filled
+	// Movies fill the screen, cutting off the edges
+	const bool bIsPillarboxed = StrStrIA(path, "intros") != nullptr;
+	const float ScaledWidth = GetScaledResolutionWidth();
+
+	auto Protect = ScopedUnprotect::UnprotectSectionOrFullModule( GetModuleHandle( nullptr ), ".text" );
+	if (bIsPillarboxed || gAspectRatioMult >= 1.0f)
+	{
+		*UI_MovieX1 = ScaledWidth / 2.0f - 320.0f - 0.5f;
+		*UI_MovieY1 = -0.5f;
+		*UI_MovieX2 = ScaledWidth / 2.0f + 320.0f + 0.5f;
+		*UI_MovieY2 = 480.5f;
+	}
+	else
+	{
+		// Wider than 4:3, cut off top/bottom
+		const float DesiredHeight = ScaledWidth * 3.0f / 4.0f;
+		*UI_MovieX1 = -0.5f;
+		*UI_MovieY1 = (240.0f - (DesiredHeight / 2.0f)) - 0.5f;
+		*UI_MovieX2 = ScaledWidth + 0.5f;
+		*UI_MovieY2 = (240.0f + (DesiredHeight / 2.0f)) + 0.5f;
+	}
+	orgSetMovieDirectory(path);
 }
