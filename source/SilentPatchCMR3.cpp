@@ -885,25 +885,36 @@ void OnInitializeHook()
 				get_pattern("E8 ? ? ? ? 8D 55 01"),
 			};
 			
-			// Championship standings pre-championship + unknown
+			// Championship standings pre-championship + unknown + Special Stage versus
 			void* champ_standings1[] = {
 				get_pattern("E8 ? ? ? ? 55 E8 ? ? ? ? 50 E8 ? ? ? ? 8D 4C 24 64"),
 				get_pattern("51 6A 00 E8 ? ? ? ? 55 E8 ? ? ? ? 50", 3),
 				get_pattern("6A 00 E8 ? ? ? ? 55 E8 ? ? ? ? 50 E8 ? ? ? ? 8D 4C 24 60", 2),
 				get_pattern("50 6A 00 E8 ? ? ? ? 55", 3),
 				get_pattern("E8 ? ? ? ? 6A 00 6A 00 6A 00 6A 00 6A FF E8 ? ? ? ? 5E 83 C4 08"),
+
+				// Special Stage versus
+				get_pattern("E8 ? ? ? ? E8 ? ? ? ? 50 E8 ? ? ? ? 85 C0 A1"),
+				get_pattern("E8 ? ? ? ? A1 ? ? ? ? 83 F8 04"),
+				get_pattern("E8 ? ? ? ? E8 ? ? ? ? 50 E8 ? ? ? ? 85 C0 75 42")
 			};
 			auto champ_standings2 = pattern("68 EA 01 00 00 50 6A 00 E8").count(2);
 			
-			void* champ_standings_extents[] = {
+			void* champ_standings_extents1[] = {
 				get_pattern("6A FE E8 ? ? ? ? 8D 45 01", 2),
 				get_pattern("E8 ? ? ? ? 8D 4D 01 51"),
 				get_pattern("6A FE E8 ? ? ? ? E8 ? ? ? ? 25 ? ? ? ? 50 E8", 2),
 			};
+			// Special Stage versus
+			auto champ_standings_extents2 = pattern("E8 ? ? ? ? 6A 09 53 D9 44 24 14 D8 0D ? ? ? ? E8 ? ? ? ? B9").count(3);
 
 			void* champ_standings_redbar[] = {
 				get_pattern("E8 ? ? ? ? EB 05 BB"),
 				get_pattern("68 ? ? ? ? E8 ? ? ? ? EB 08", 5),
+
+				// Special Stage versus
+				get_pattern("E8 ? ? ? ? A1 ? ? ? ? 83 F8 03 75 0A"),
+				get_pattern("68 ? ? ? ? E8 ? ? ? ? 6A 00 6A 00 6A 00", 5),
 			};
 
 			pattern("BA 80 02 00 00 2B D0").count(2).for_each_result([](pattern_match match)
@@ -973,10 +984,14 @@ void OnInitializeHook()
 				InjectHook(match.get<void>(8), DrawString_RightAlign);
 			});
 
-			for (void* addr : champ_standings_extents)
+			for (void* addr : champ_standings_extents1)
 			{
 				InjectHook(addr, SetStringExtents_FullWidth);
 			}
+			champ_standings_extents2.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(), SetStringExtents_FullWidth);
+			});
 			for (void* addr : champ_standings_redbar)
 			{
 				InjectHook(addr, DrawSolidRectangle_RightAlign);
