@@ -8,7 +8,7 @@
 
 using namespace Graphics::Patches;
 
-static float GetScaledResolutionWidth()
+float GetScaledResolutionWidth()
 {
 	return 480.0f * (static_cast<float>(GetResolutionWidth()) / GetResolutionHeight());
 }
@@ -46,7 +46,7 @@ OSD_Element* OSD_Element_Init(OSD_Element* element, int posX, int posY, int widt
 	return element;
 }
 
-void D3D_DrawRectangles_Center(float* data, uint32_t numRectangles)
+void Core_Blitter2D_Rect2D_G_Center(float* data, uint32_t numRectangles)
 {
 	const float resolutionWidth = static_cast<float>(GetResolutionWidth());
 	const float scaledOldCenter = 320.0f * (resolutionWidth / GetScaledResolutionWidth());
@@ -59,10 +59,10 @@ void D3D_DrawRectangles_Center(float* data, uint32_t numRectangles)
 		rect[4] += offset;
 		rect[5] += offset;
 	}
-	D3D_DrawRectangles(data, numRectangles);
+	Core_Blitter2D_Rect2D_G(data, numRectangles);
 }
 
-void D3D_DrawLines_Center(float* data, uint32_t numLines)
+void Core_Blitter2D_Line2D_G_Center(float* data, uint32_t numLines)
 {
 	const float resolutionWidth = static_cast<float>(GetResolutionWidth());
 	const float scaledOldCenter = 320.0f * (resolutionWidth / GetScaledResolutionWidth());
@@ -75,40 +75,49 @@ void D3D_DrawLines_Center(float* data, uint32_t numLines)
 		rect[2] += offset;
 		rect[3] += offset;
 	}
-	D3D_DrawLines(data, numLines);
+	Core_Blitter2D_Line2D_G(data, numLines);
 }
 
-void DrawSolidRectangle_Stretch(int posX, int posY, int width, int height, int color)
+void Core_Blitter2D_Quad2D_GT_RightAlign(float* data, uint32_t numRectangles)
+{
+	const float resolutionWidth = static_cast<float>(GetResolutionWidth());
+	const float scaledOldRight = 640.0f * (resolutionWidth / GetScaledResolutionWidth());
+	const float offset = resolutionWidth - scaledOldRight;
+	for (uint32_t i = 0; i < numRectangles; ++i)
+	{
+		// Those rectangles are already multiplied for resolution
+		float* rect = &data[13 * i];
+		rect[8] += offset;
+		rect[9] += offset;
+	}
+	Core_Blitter2D_Quad2D_GT(data, numRectangles);
+}
+
+void HandyFunction_Draw2DBox_Stretch(int posX, int posY, int width, int height, int color)
 {
 	const float widthScale = GetScaledResolutionWidth() / 640.0f;
-	DrawSolidRectangle(posX, posY, static_cast<int>(std::ceil(width * widthScale)), height, color);
+	HandyFunction_Draw2DBox(posX, posY, static_cast<int>(std::ceil(width * widthScale)), height, color);
 }
 
-void DrawSolidRectangle_RightAlign(int posX, int posY, int width, int height, int color)
+void HandyFunction_Draw2DBox_RightAlign(int posX, int posY, int width, int height, int color)
 {
 	const float scaledWidth = GetScaledResolutionWidth();
 	const int offset = 640 - posX;
-	DrawSolidRectangle(static_cast<int>(scaledWidth - offset), posY, width + 1, height, color);
+	HandyFunction_Draw2DBox(static_cast<int>(scaledWidth - offset), posY, width + 1, height, color);
 }
 
-void DrawString_Center(uint8_t a1, const char* text, int posX, int posY, int a5, char a6)
+void CMR3Font_BlitText_Center(uint8_t a1, const char* text, int posX, int posY, int a5, char a6)
 {
 	const float scaledWidth = GetScaledResolutionWidth();
 	const int offset = posX - 320;
-	DrawString(a1, text, static_cast<int>(scaledWidth / 2 + offset), posY, a5, a6);
+	CMR3Font_BlitText(a1, text, static_cast<int>(scaledWidth / 2 + offset), posY, a5, a6);
 }
 
-void DrawString_RightAlign(uint8_t a1, const char* text, int posX, int posY, int a5, char a6)
+void CMR3Font_BlitText_RightAlign(uint8_t a1, const char* text, int posX, int posY, int a5, char a6)
 {
 	const float scaledWidth = GetScaledResolutionWidth();
 	const int offset = 640 - posX;
-	DrawString(a1, text, static_cast<int>(scaledWidth - offset), posY, a5, a6);
-}
-
-void SetStringExtents_Stretch(int a1, int x1, int y1, int x2, int y2)
-{
-	const float widthScale = GetScaledResolutionWidth() / 640.0f;
-	SetStringExtents(a1, x1, y1, static_cast<int>(std::ceil(x2 * widthScale)), y2);
+	CMR3Font_BlitText(a1, text, static_cast<int>(scaledWidth - offset), posY, a5, a6);
 }
 
 void Graphics_Viewports_SetAspectRatios()

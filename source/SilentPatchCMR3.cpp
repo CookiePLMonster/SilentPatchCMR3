@@ -13,6 +13,7 @@
 #include <wil/com.h>
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <map>
 #include <vector>
@@ -450,6 +451,53 @@ namespace HalfPixel
 	}
 }
 
+// Hack to scretch full-width solid backgrounds to the entire screen, saves 30+ patches
+namespace SolidRectangleWidthHack
+{
+	static void* HandyFunction_Draw2DBox_JumpBack;
+	__declspec(naked) void HandyFunction_Draw2DBox_Original(int /*posX*/, int /*posY*/, int /*width*/, int /*height*/, int /*color*/)
+	{
+		__asm
+		{
+			sub		esp, 50h
+			push	esi
+			push	edi
+			jmp		[HandyFunction_Draw2DBox_JumpBack]
+		}
+	}
+
+	void HandyFunction_Draw2DBox_Hack(int posX, int posY, int width, int height, int color)
+	{
+		// If it's a draw spanning the entire width, stretch it automatically.
+		if (posX == 0 && width == 640)
+		{
+			width = static_cast<int>(std::ceil(GetScaledResolutionWidth()));
+		}
+		HandyFunction_Draw2DBox_Original(posX, posY, width, height, color);
+	}
+
+	static void* CMR3Font_SetViewport_JumpBack;
+	__declspec(naked) void CMR3Font_SetViewport_Original(int /*a1*/, int /*x1*/, int /*y1*/, int /*x2*/, int /*y2*/)
+	{
+		__asm
+		{
+			mov		eax, [esp+4]
+			push	ebx
+			jmp		[CMR3Font_SetViewport_JumpBack]
+		}
+	}
+
+	void CMR3Font_SetViewport_Hack(int a1, int x1, int y1, int x2, int y2)
+	{
+		// If it's a viewport spanning the entire width, stretch it automatically.
+		if (x1 == 0 && x2 == 640)
+		{
+			x2 = static_cast<int>(std::ceil(GetScaledResolutionWidth()));
+		}
+		CMR3Font_SetViewport_Original(a1, x1, y1, x2, y2);
+	}
+}
+
 void OnInitializeHook()
 {
 	static_assert(std::string_view(__FUNCSIG__).find("__stdcall") != std::string_view::npos, "This codebase must default to __stdcall, please change your compilation settings.");
@@ -790,12 +838,12 @@ void OnInitializeHook()
 			extern void (*orgD3D_AfterReinitialise)(void* param);
 			extern void (*orgSetMovieDirectory)(const char* path);
 
-			DrawSolidRectangle = reinterpret_cast<decltype(DrawSolidRectangle)>(get_pattern("6A 01 E8 ? ? ? ? 6A 05 E8 ? ? ? ? 6A 06 E8 ? ? ? ? DB 44 24 5C", -5));
-			DrawString = reinterpret_cast<decltype(DrawString)>(get_pattern("8B 74 24 30 8B 0D", -6));
-			SetStringExtents = reinterpret_cast<decltype(SetStringExtents)>(get_pattern("56 83 F8 FE", -6));
+			HandyFunction_Draw2DBox = reinterpret_cast<decltype(HandyFunction_Draw2DBox)>(get_pattern("6A 01 E8 ? ? ? ? 6A 05 E8 ? ? ? ? 6A 06 E8 ? ? ? ? DB 44 24 5C", -5));
+			CMR3Font_BlitText = reinterpret_cast<decltype(CMR3Font_BlitText)>(get_pattern("8B 74 24 30 8B 0D", -6));
 
-			D3D_DrawRectangles = reinterpret_cast<decltype(D3D_DrawRectangles)>(ReadCallFrom(get_pattern("E8 ? ? ? ? 8D 44 24 68")));
-			D3D_DrawLines = reinterpret_cast<decltype(D3D_DrawLines)>(get_pattern("F7 D8 57", -0x14));
+			Core_Blitter2D_Rect2D_G = reinterpret_cast<decltype(Core_Blitter2D_Rect2D_G)>(ReadCallFrom(get_pattern("E8 ? ? ? ? 8D 44 24 68")));
+			Core_Blitter2D_Line2D_G = reinterpret_cast<decltype(Core_Blitter2D_Line2D_G)>(get_pattern("F7 D8 57", -0x14));
+			Core_Blitter2D_Quad2D_GT = reinterpret_cast<decltype(Core_Blitter2D_Quad2D_GT)>(ReadCallFrom(get_pattern("E8 ? ? ? ? 83 C5 28")));
 
 			auto initialise = get_pattern("E8 ? ? ? ? 8B 54 24 24 89 5C 24 18");
 			auto reinitialise = get_pattern("E8 ? ? ? ? 8B 15 ? ? ? ? A1 ? ? ? ? 8B 0D");
@@ -816,9 +864,8 @@ void OnInitializeHook()
 			};
 
 			void* solid_background_full_width[] = {
-				get_pattern("2B D0 52 6A 00 E8 ? ? ? ? C2 08 00", 5),
-				get_pattern("68 4E 01 00 00 6A 00 E8 ? ? ? ? C2 04 00", 7),
-				get_pattern("68 64 01 00 00 6A 00 E8 ? ? ? ? C2 04 00", 7),
+				// Stage loading tiles
+				get_pattern("E8 ? ? ? ? 46 83 C7 04 83 FE 05"),
 			};
 
 			// Constants to change
@@ -880,11 +927,6 @@ void OnInitializeHook()
 				get_pattern("52 6A 00 E8 ? ? ? ? 55", 3),
 				get_pattern("68 ? ? ? ? 52 6A 00 E8 ? ? ? ? 6A 00", 8),
 			};
-
-			void* race_standings_extents[] = {
-				get_pattern("6A FE E8 ? ? ? ? E8 ? ? ? ? 25 ? ? ? ? 50 68", 2),
-				get_pattern("E8 ? ? ? ? 8D 55 01"),
-			};
 			
 			// Championship standings pre-championship + unknown + Special Stage versus
 			void* champ_standings1[] = {
@@ -900,14 +942,6 @@ void OnInitializeHook()
 				get_pattern("E8 ? ? ? ? E8 ? ? ? ? 50 E8 ? ? ? ? 85 C0 75 42")
 			};
 			auto champ_standings2 = pattern("68 EA 01 00 00 50 6A 00 E8").count(2);
-			
-			void* champ_standings_extents1[] = {
-				get_pattern("6A FE E8 ? ? ? ? 8D 45 01", 2),
-				get_pattern("E8 ? ? ? ? 8D 4D 01 51"),
-				get_pattern("6A FE E8 ? ? ? ? E8 ? ? ? ? 25 ? ? ? ? 50 E8", 2),
-			};
-			// Special Stage versus
-			auto champ_standings_extents2 = pattern("E8 ? ? ? ? 6A 09 53 D9 44 24 14 D8 0D ? ? ? ? E8 ? ? ? ? B9").count(3);
 
 			void* champ_standings_redbar[] = {
 				get_pattern("E8 ? ? ? ? EB 05 BB"),
@@ -943,7 +977,18 @@ void OnInitializeHook()
 			// Stage loading background tiles
 			UI_RightAlignElements.emplace_back(std::in_place_type<FloatPatch>, get_pattern<float>("C7 44 24 ? ? ? ? ? 89 44 24 3C 89 44 24 38", 4), 640.0f);
 			UI_RightAlignElements.emplace_back(std::in_place_type<FloatPatch>, get_pattern<float>("DF 6C 24 78 C7 44 24", 4+4), 640.0f);
-			auto rectangle_tile_draw = get_pattern("E8 ? ? ? ? 46 83 C7 04 83 FE 05");
+
+			// CMR3 logo in menus
+			UI_RightAlignElements.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("68 ? ? ? ? 6A 40 6A 40", 1), 519);
+			
+			auto post_race_certina_logos1 = pattern("E8 ? ? ? ? 6A 15 E8 ? ? ? ? 50").count(5);
+			auto post_race_certina_logos2 = pattern("E8 ? ? ? ? 68 51 02 00 00").count(2);
+			auto post_race_flags = pattern("E8 ? ? ? ? 83 ? 28 8B 54 24").count(2);
+			patch_field("68 34 02 00 00", 1); // push 564
+			
+			auto post_race_centered_texts1 = pattern("68 40 01 00 00 68 ? ? ? ? E8 ? ? ? ? 50 6A 00 E8 ? ? ? ? 5F 5E").count(6);
+			auto post_race_right_texts1 = pattern("6A 00 E8 ? ? ? ? ? 83 ? 06").count(2);
+			auto post_race_right_texts2 = pattern("68 33 02 00 00 68 ? ? ? ? 6A 0C E8").count(2);
 
 			// Movie rendering
 			auto movie_rect = pattern("C7 05 ? ? ? ? 00 00 00 BF C7 05 ? ? ? ? 00 00 00 BF").get_one();
@@ -957,6 +1002,21 @@ void OnInitializeHook()
 			orgOSDData2 = *osd_data.get<OSD_Data2*>(27+3);
 
 			orgStartLightData = *get_pattern<Object_StartLight*>("8D 34 8D ? ? ? ? 89 74 24 0C", 3);
+
+			// Assembly hook into HandyFunction_Draw2DBox and CMR3Font_SetViewport to stretch fullscreen draws automatically
+			// Opt out by drawing 1px offscreen
+			{
+				using namespace SolidRectangleWidthHack;
+
+				auto draw_solid_background = pattern("DB 44 24 5C 8B 44 24 6C").get_one();
+				auto set_string_extents = pattern("56 83 F8 FE 57").get_one();
+
+				InjectHook(draw_solid_background.get<void>(-0x1A), HandyFunction_Draw2DBox_Hack, PATCH_JUMP);
+				HandyFunction_Draw2DBox_JumpBack = draw_solid_background.get<void>(-0x1A + 5);
+
+				InjectHook(set_string_extents.get<void>(-6), CMR3Font_SetViewport_Hack, PATCH_JUMP);
+				CMR3Font_SetViewport_JumpBack = set_string_extents.get<void>(-6 + 5);
+			}
 
 			ReadCall(initialise, orgD3D_Initialise);
 			InjectHook(initialise, D3D_Initialise_RecalculateUI);
@@ -978,53 +1038,64 @@ void OnInitializeHook()
 
 			for (void* addr : solid_background_full_width)
 			{
-				InjectHook(addr, DrawSolidRectangle_Stretch);
+				InjectHook(addr, HandyFunction_Draw2DBox_Stretch);
 			}
 
 			for (void* addr : race_standings)
 			{
-				InjectHook(addr, DrawString_RightAlign);
-			}
-			for (void* addr : race_standings_extents)
-			{
-				InjectHook(addr, SetStringExtents_Stretch);
+				InjectHook(addr, CMR3Font_BlitText_RightAlign);
 			}
 			for (void* addr : champ_standings1)
 			{
-				InjectHook(addr, DrawString_RightAlign);
+				InjectHook(addr, CMR3Font_BlitText_RightAlign);
 			}
 			champ_standings2.for_each_result([](pattern_match match)
 			{
-				InjectHook(match.get<void>(8), DrawString_RightAlign);
+				InjectHook(match.get<void>(8), CMR3Font_BlitText_RightAlign);
 			});
 
-			for (void* addr : champ_standings_extents1)
-			{
-				InjectHook(addr, SetStringExtents_Stretch);
-			}
-			champ_standings_extents2.for_each_result([](pattern_match match)
-			{
-				InjectHook(match.get<void>(), SetStringExtents_Stretch);
-			});
 			for (void* addr : champ_standings_redbar)
 			{
-				InjectHook(addr, DrawSolidRectangle_RightAlign);
+				InjectHook(addr, HandyFunction_Draw2DBox_RightAlign);
 			}
 
 			for (void* addr : new_championship_loading_screen_text)
 			{
-				InjectHook(addr, DrawString_Center);
+				InjectHook(addr, CMR3Font_BlitText_Center);
 			}
 			for (void* addr : new_championship_loading_screen_rectangles)
 			{
-				InjectHook(addr, D3D_DrawRectangles_Center);
+				InjectHook(addr, Core_Blitter2D_Rect2D_G_Center);
 			}
 			for (void* addr : new_championship_loading_screen_lines)
 			{
-				InjectHook(addr, D3D_DrawLines_Center);
+				InjectHook(addr, Core_Blitter2D_Line2D_G_Center);
 			}
 
-			InjectHook(rectangle_tile_draw, DrawSolidRectangle_Stretch);
+			post_race_certina_logos1.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(), Core_Blitter2D_Quad2D_GT_RightAlign);
+			});
+			post_race_certina_logos2.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(), Core_Blitter2D_Quad2D_GT_RightAlign);
+			});
+			post_race_flags.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(), Core_Blitter2D_Quad2D_GT_RightAlign);
+			});
+			post_race_centered_texts1.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(18), CMR3Font_BlitText_Center);
+			});
+			post_race_right_texts1.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(2), CMR3Font_BlitText_RightAlign);
+			});
+			post_race_right_texts2.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(12), CMR3Font_BlitText_RightAlign);
+			});
 
 			ReadCall(movie_name_setdir, orgSetMovieDirectory);
 			InjectHook(movie_name_setdir, SetMovieDirectory_SetDimensions);

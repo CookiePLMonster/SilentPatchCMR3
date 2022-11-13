@@ -135,28 +135,28 @@ inline void (*D3DViewport_SetAspectRatio)(D3DViewport* viewport, float hfov, flo
 inline uint32_t (*GetResolutionWidth)();
 inline uint32_t (*GetResolutionHeight)();
 
-inline void (*D3D_DrawRectangles)(float* data, uint32_t numRectangles);
-inline void (*D3D_DrawLines)(float* data, uint32_t numLines);
+inline void (*Core_Blitter2D_Rect2D_G)(float* data, uint32_t numRectangles);
+inline void (*Core_Blitter2D_Quad2D_GT)(float* data, uint32_t numRectangles);
+inline void (*Core_Blitter2D_Line2D_G)(float* data, uint32_t numLines);
 
-inline void (*DrawSolidRectangle)(int posX, int posY, int width, int height, int color);
-inline void (*DrawString)(uint8_t a1, const char* text, int posX, int posY, int a5, char a6);
-
-inline void (*SetStringExtents)(int a1, int x1, int y1, int x2, int y2);
+inline void (*HandyFunction_Draw2DBox)(int posX, int posY, int width, int height, int color);
+inline void (*CMR3Font_BlitText)(uint8_t a1, const char* text, int posX, int posY, int a5, char a6);
 
 inline int32_t (*GetNumPlayers)();
 
 inline D3DViewport** gViewports;
 inline D3DViewport** gDefaultViewport;
 
-void D3D_DrawRectangles_Center(float* data, uint32_t numRectangles);
-void D3D_DrawLines_Center(float* data, uint32_t numLines);
+float GetScaledResolutionWidth();
 
-void DrawSolidRectangle_Stretch(int posX, int posY, int width, int height, int color);
-void DrawSolidRectangle_RightAlign(int posX, int posY, int width, int height, int color);
-void DrawString_Center(uint8_t a1, const char* text, int posX, int posY, int a5, char a6);
-void DrawString_RightAlign(uint8_t a1, const char* text, int posX, int posY, int a5, char a6);
+void Core_Blitter2D_Rect2D_G_Center(float* data, uint32_t numRectangles);
+void Core_Blitter2D_Line2D_G_Center(float* data, uint32_t numLines);
+void Core_Blitter2D_Quad2D_GT_RightAlign(float* data, uint32_t numRectangles);
 
-void SetStringExtents_Stretch(int a1, int x1, int y1, int x2, int y2);
+void HandyFunction_Draw2DBox_Stretch(int posX, int posY, int width, int height, int color);
+void HandyFunction_Draw2DBox_RightAlign(int posX, int posY, int width, int height, int color);
+void CMR3Font_BlitText_Center(uint8_t a1, const char* text, int posX, int posY, int a5, char a6);
+void CMR3Font_BlitText_RightAlign(uint8_t a1, const char* text, int posX, int posY, int a5, char a6);
 
 void Graphics_Viewports_SetAspectRatios();
 
