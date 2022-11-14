@@ -843,7 +843,7 @@ void OnInitializeHook()
 
 			Core_Blitter2D_Rect2D_G = reinterpret_cast<decltype(Core_Blitter2D_Rect2D_G)>(ReadCallFrom(get_pattern("E8 ? ? ? ? 8D 44 24 68")));
 			Core_Blitter2D_Line2D_G = reinterpret_cast<decltype(Core_Blitter2D_Line2D_G)>(get_pattern("F7 D8 57", -0x14));
-			Core_Blitter2D_Quad2D_GT = reinterpret_cast<decltype(Core_Blitter2D_Quad2D_GT)>(ReadCallFrom(get_pattern("E8 ? ? ? ? 83 C5 28")));
+			Core_Blitter2D_Quad2D_GT = reinterpret_cast<decltype(Core_Blitter2D_Quad2D_GT)>(ReadCallFrom(get_pattern("DD D8 E8 ? ? ? ? 8B 7C 24 30", 2)));
 
 			auto initialise = get_pattern("E8 ? ? ? ? 8B 54 24 24 89 5C 24 18");
 			auto reinitialise = get_pattern("E8 ? ? ? ? 8B 15 ? ? ? ? A1 ? ? ? ? 8B 0D");
@@ -983,12 +983,12 @@ void OnInitializeHook()
 			
 			auto post_race_certina_logos1 = pattern("E8 ? ? ? ? 6A 15 E8 ? ? ? ? 50").count(5);
 			auto post_race_certina_logos2 = pattern("E8 ? ? ? ? 68 51 02 00 00").count(2);
-			auto post_race_flags = pattern("E8 ? ? ? ? 83 ? 28 8B 54 24").count(2);
+			auto post_race_flags = pattern("E8 ? ? ? ? 83 ? ? 8B 54 24 ? 42").count(2);
 			patch_field("68 34 02 00 00", 1); // push 564
 			
 			auto post_race_centered_texts1 = pattern("68 40 01 00 00 68 ? ? ? ? E8 ? ? ? ? 50 6A 00 E8 ? ? ? ? 5F 5E").count(6);
 			auto post_race_right_texts1 = pattern("6A 00 E8 ? ? ? ? ? 83 ? 06").count(2);
-			auto post_race_right_texts2 = pattern("68 33 02 00 00 68 ? ? ? ? 6A 0C E8").count(2);
+			auto post_race_right_texts2 = pattern("68 ? ? ? ? 68 ? ? ? ? 6A 0C E8 ? ? ? ? 8B 74 24 ? 8B 7C 24").count(2);
 
 			// Movie rendering
 			auto movie_rect = pattern("C7 05 ? ? ? ? 00 00 00 BF C7 05 ? ? ? ? 00 00 00 BF").get_one();
