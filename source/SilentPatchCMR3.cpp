@@ -261,6 +261,18 @@ void CalculateSunColorFromOcclusion_Clamped(float val)
 	orgCalculateSunColorFromOcclusion(std::clamp(val, 0.0f, 1.0f));
 }
 
+namespace QuitMessageFix
+{
+	static uint32_t* gboExitProgram;
+
+	void WINAPI PostQuitMessage_AndRequestExit(int nExitCode)
+	{
+		*gboExitProgram = 1;
+		::PostQuitMessage(nExitCode);
+	}
+	auto* const pPostQuitMessage_AndRequestExit = &PostQuitMessage_AndRequestExit;
+}
+
 namespace Timers
 {
 	static int64_t GetQPC()
@@ -1134,6 +1146,23 @@ void OnInitializeHook()
 		}
 		Graphics::Patches::UI_CenteredElements.shrink_to_fit();
 		Graphics::Patches::UI_RightAlignElements.shrink_to_fit();
+	}
+	TXN_CATCH();
+
+
+	// Re-enabled Alt+F4
+	try
+	{
+		using namespace QuitMessageFix;
+
+		auto wndproc_messages_indirect_array = *get_pattern<uint8_t*>("8A 88 ? ? ? ? FF 24 8D ? ? ? ? 33 D2", 2);
+		auto post_quit_message = get_pattern("6A 00 FF 15 ? ? ? ? E9", 2 + 2);
+		gboExitProgram = *get_pattern<uint32_t*>("83 C4 04 39 2D", 3+2);
+
+		const uint8_t def_proc = wndproc_messages_indirect_array[WM_CLOSE + 1 - 2];
+		Patch<uint8_t>(&wndproc_messages_indirect_array[WM_CLOSE - 2], def_proc);
+
+		Patch(post_quit_message, &pPostQuitMessage_AndRequestExit);
 	}
 	TXN_CATCH();
 }
