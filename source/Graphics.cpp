@@ -8,6 +8,8 @@
 
 using namespace Graphics::Patches;
 
+static void RecalculateMoviesDimensions();
+
 float GetScaledResolutionWidth()
 {
 	return 480.0f * (static_cast<float>(GetResolutionWidth()) / GetResolutionHeight());
@@ -233,6 +235,8 @@ static void RecalculateUI()
 				*val.first = right(val.second);
 			}, item);
 		}
+
+		RecalculateMoviesDimensions();
 	}
 
 	// Update OSD data
@@ -298,16 +302,11 @@ void D3DViewport_GetAspectRatioForCoDriver(D3DViewport* /*viewport*/, float* hor
 	*horFov = *vertFov = 1.0f;
 }
 
-void (*orgSetMovieDirectory)(const char* path);
-void SetMovieDirectory_SetDimensions(const char* path)
+static bool bCurrentMoviePillarboxed = false;
+static void RecalculateMoviesDimensions()
 {
-	// intros are pillarboxed, the rest is filled
-	// Movies fill the screen, cutting off the edges
-	const bool bIsPillarboxed = StrStrIA(path, "intros") != nullptr;
 	const float ScaledWidth = GetScaledResolutionWidth();
-
-	auto Protect = ScopedUnprotect::UnprotectSectionOrFullModule( GetModuleHandle( nullptr ), ".text" );
-	if (bIsPillarboxed || gAspectRatioMult >= 1.0f)
+	if (bCurrentMoviePillarboxed || gAspectRatioMult >= 1.0f)
 	{
 		*UI_MovieX1 = ScaledWidth / 2.0f - 320.0f - 0.5f;
 		*UI_MovieY1 = -0.5f;
@@ -322,6 +321,18 @@ void SetMovieDirectory_SetDimensions(const char* path)
 		*UI_MovieY1 = (240.0f - (DesiredHeight / 2.0f)) - 0.5f;
 		*UI_MovieX2 = ScaledWidth + 0.5f;
 		*UI_MovieY2 = (240.0f + (DesiredHeight / 2.0f)) + 0.5f;
+	}
+}
+
+void (*orgSetMovieDirectory)(const char* path);
+void SetMovieDirectory_SetDimensions(const char* path)
+{
+	// intros are pillarboxed, the rest is filled
+	// Movies fill the screen, cutting off the edges
+	bCurrentMoviePillarboxed = StrStrIA(path, "intros") != nullptr;
+	{
+		auto Protect = ScopedUnprotect::UnprotectSectionOrFullModule( GetModuleHandle( nullptr ), ".text" );
+		RecalculateMoviesDimensions();
 	}
 	orgSetMovieDirectory(path);
 }
