@@ -1020,12 +1020,27 @@ void OnInitializeHook()
 			
 			auto post_race_certina_logos1 = pattern("E8 ? ? ? ? 6A 15 E8 ? ? ? ? 50").count(5);
 			auto post_race_certina_logos2 = pattern("E8 ? ? ? ? 68 51 02 00 00").count(2);
+			auto post_race_certina_logos3 = pattern("E8 ? ? ? ? 68 46 02 00 00 E8").count(2);
+			auto post_race_certina_logos4 = pattern("E8 ? ? ? ? 68 DA 00 00 00 E8").count(1);
 			auto post_race_flags = pattern("E8 ? ? ? ? 83 ? ? 8B 54 24 ? 42").count(2);
 			patch_field("68 34 02 00 00", 1); // push 564
 			
 			auto post_race_centered_texts1 = pattern("68 40 01 00 00 68 ? ? ? ? E8 ? ? ? ? 50 6A 00 E8 ? ? ? ? 5F 5E").count(6);
+			auto post_race_centered_texts2 = pattern("68 40 01 00 00 68 ? ? ? ? E8 ? ? ? ? 50 6A 00 E8 ? ? ? ? 5E 5D").count(1);
 			auto post_race_right_texts1 = pattern("6A 00 E8 ? ? ? ? ? 83 ? 06").count(2);
 			auto post_race_right_texts2 = pattern("68 ? ? ? ? 68 ? ? ? ? 6A 0C E8 ? ? ? ? 8B 74 24 ? 8B 7C 24").count(2);
+			auto post_race_right_texts3 = pattern("68 17 02 00 00 68 ? ? ? ? 6A 0C E8").count(4);
+			
+			// Time trial texts need a range check
+			auto post_race_right_texts4 = pattern(get_pattern_uintptr("53 55 56 E8 ? ? ? ? D9 84 24 ? ? ? ? D8 0D"),
+												post_race_centered_texts2.get_one().get_uintptr(),
+												"E8 ? ? ? ? 46 83 FE").count(5);
+
+			// Shakedown
+			auto post_race_right_texts5 = pattern("E8 ? ? ? ? 46 83 FE 03 7C 9A").count(1);
+			auto post_race_right_texts6 = pattern("68 7B 01 00 00 68 ? ? ? ? 55 E8").count(3);
+			auto post_race_right_texts7 = pattern("68 C9 01 00 00 68 ? ? ? ? 6A 0C E8").count(3);
+
 
 			// Movie rendering
 			auto movie_rect = pattern("C7 05 ? ? ? ? 00 00 00 BF C7 05 ? ? ? ? 00 00 00 BF").get_one();
@@ -1117,6 +1132,14 @@ void OnInitializeHook()
 			{
 				InjectHook(match.get<void>(), Core_Blitter2D_Quad2D_GT_RightAlign);
 			});
+			post_race_certina_logos3.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(), Core_Blitter2D_Quad2D_GT_RightAlign);
+			});
+			post_race_certina_logos4.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(), Core_Blitter2D_Quad2D_GT_RightAlign);
+			});
 			post_race_flags.for_each_result([](pattern_match match)
 			{
 				InjectHook(match.get<void>(), Core_Blitter2D_Quad2D_GT_RightAlign);
@@ -1125,11 +1148,35 @@ void OnInitializeHook()
 			{
 				InjectHook(match.get<void>(18), CMR3Font_BlitText_Center);
 			});
+			post_race_centered_texts2.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(18), CMR3Font_BlitText_Center);
+			});
 			post_race_right_texts1.for_each_result([](pattern_match match)
 			{
 				InjectHook(match.get<void>(2), CMR3Font_BlitText_RightAlign);
 			});
 			post_race_right_texts2.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(12), CMR3Font_BlitText_RightAlign);
+			});
+			post_race_right_texts3.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(12), CMR3Font_BlitText_RightAlign);
+			});
+			post_race_right_texts4.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(), CMR3Font_BlitText_RightAlign);
+			});
+			post_race_right_texts5.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(), CMR3Font_BlitText_RightAlign);
+			});
+			post_race_right_texts6.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(11), CMR3Font_BlitText_RightAlign);
+			});
+			post_race_right_texts7.for_each_result([](pattern_match match)
 			{
 				InjectHook(match.get<void>(12), CMR3Font_BlitText_RightAlign);
 			});
