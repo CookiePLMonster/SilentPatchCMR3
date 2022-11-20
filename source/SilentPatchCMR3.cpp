@@ -878,6 +878,8 @@ void OnInitializeHook()
 			HandyFunction_Draw2DBox = reinterpret_cast<decltype(HandyFunction_Draw2DBox)>(get_pattern("6A 01 E8 ? ? ? ? 6A 05 E8 ? ? ? ? 6A 06 E8 ? ? ? ? DB 44 24 5C", -5));
 			CMR3Font_BlitText = reinterpret_cast<decltype(CMR3Font_BlitText)>(get_pattern("8B 74 24 30 8B 0D", -6));
 
+			Keyboard_DrawTextEntryBox = reinterpret_cast<decltype(Keyboard_DrawTextEntryBox)>(get_pattern("56 3B C3 57 0F 84 ? ? ? ? DB 84 24", -0xD));
+
 			Core_Blitter2D_Rect2D_G = reinterpret_cast<decltype(Core_Blitter2D_Rect2D_G)>(ReadCallFrom(get_pattern("E8 ? ? ? ? 8D 44 24 68")));
 			Core_Blitter2D_Line2D_G = reinterpret_cast<decltype(Core_Blitter2D_Line2D_G)>(get_pattern("F7 D8 57", -0x14));
 			Core_Blitter2D_Quad2D_GT = reinterpret_cast<decltype(Core_Blitter2D_Quad2D_GT)>(ReadCallFrom(get_pattern("DD D8 E8 ? ? ? ? 8B 7C 24 30", 2)));
@@ -1041,6 +1043,28 @@ void OnInitializeHook()
 			auto post_race_right_texts6 = pattern("68 7B 01 00 00 68 ? ? ? ? 55 E8").count(3);
 			auto post_race_right_texts7 = pattern("68 C9 01 00 00 68 ? ? ? ? 6A 0C E8").count(3);
 
+			// Stages high scores
+			auto stages_highscores_begin = get_pattern_uintptr("53 55 56 57 33 FF 89 7C 24 14");
+			auto stages_highscores_end = get_pattern_uintptr("0F 82 ? ? ? ? 6A 00 6A 00 6A 00 6A 00");
+			auto stages_highscores_centered_texts1 = pattern(stages_highscores_begin, stages_highscores_end, "68 ? ? ? ? 57 E8");
+			auto stages_highscores_centered_texts2 = pattern(stages_highscores_begin, stages_highscores_end, "6A 00 E8");
+			auto stages_highscores_centered_texts3 = pattern(stages_highscores_begin, stages_highscores_end, "6A 0C E8");
+
+			// Championship high scores
+			auto championship_highscores_begin = get_pattern_uintptr("53 55 56 57 E8 ? ? ? ? 25");
+			auto championship_highscores_end = get_pattern_uintptr("81 FF ? ? ? ? 0F 8C ? ? ? ? 6A 00");
+			auto championship_highscores_centered_texts1 = pattern(championship_highscores_begin, championship_highscores_end, "6A 00 E8");
+			auto championship_highscores_centered_texts2 = pattern(championship_highscores_begin, championship_highscores_end, "6A 0C E8");
+
+			// OSD keyboard
+			auto osd_keyboard_draw_text_entry_box1 = pattern("E8 ? ? ? ? 50 6A 1F 68 ? ? ? ? 68 ? ? ? ? 68 ? ? ? ? E8").count(3);
+			auto osd_keyboard_draw_text_entry_box2 = pattern("E8 ? ? ? ? 8B 46 20 45 81 C7 ? ? ? ? 3B E8").count(3);
+			auto osd_keyboard_blit_text_centered1 = pattern("50 6A 00 E8 ? ? ? ? 8B 15 ? ? ? ? 56 53 52").count(2);
+			auto osd_keyboard_blit_text_centered2 = pattern("50 6A 00 E8 ? ? ? ? A1 ? ? ? ? 56").count(1);
+			auto osd_keyboard_blit_text_centered3 = pattern("E8 ? ? ? ? FF 44 24 ? E9").count(3);
+			auto osd_keyboard_blit_text_centered4 = pattern("E8 ? ? ? ? A1 ? ? ? ? 8B 54 24 18 52 53 50").count(3);
+			void* osd_keyboard_best_score_text = get_pattern("E8 ? ? ? ? 8B 7D 14 C1 EF 0A");
+			void* osd_keyboard_access_code_text = get_pattern("6A 0C E8 ? ? ? ? 8B 6C 24 24", 2);
 
 			// Movie rendering
 			auto movie_rect = pattern("C7 05 ? ? ? ? 00 00 00 BF C7 05 ? ? ? ? 00 00 00 BF").get_one();
@@ -1180,6 +1204,54 @@ void OnInitializeHook()
 			{
 				InjectHook(match.get<void>(12), CMR3Font_BlitText_RightAlign);
 			});
+
+			stages_highscores_centered_texts1.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(6), CMR3Font_BlitText_Center);
+			});
+			stages_highscores_centered_texts2.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(2), CMR3Font_BlitText_Center);
+			});
+			stages_highscores_centered_texts3.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(2), CMR3Font_BlitText_Center);
+			});
+			championship_highscores_centered_texts1.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(2), CMR3Font_BlitText_Center);
+			});
+			championship_highscores_centered_texts2.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(2), CMR3Font_BlitText_Center);
+			});
+
+			osd_keyboard_draw_text_entry_box1.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(0x17), Keyboard_DrawTextEntryBox_Center);
+			});
+			osd_keyboard_draw_text_entry_box2.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(), Keyboard_DrawTextEntryBox_Center);
+			});
+			osd_keyboard_blit_text_centered1.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(3), CMR3Font_BlitText_Center);
+			});
+			osd_keyboard_blit_text_centered2.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(3), CMR3Font_BlitText_Center);
+			});
+			osd_keyboard_blit_text_centered3.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(), CMR3Font_BlitText_Center);
+			});
+			osd_keyboard_blit_text_centered4.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(), CMR3Font_BlitText_Center);
+			});
+			InjectHook(osd_keyboard_best_score_text, CMR3Font_BlitText_Center);
+			InjectHook(osd_keyboard_access_code_text, CMR3Font_BlitText_RightAlign);
 
 			ReadCall(movie_name_setdir, orgSetMovieDirectory);
 			InjectHook(movie_name_setdir, SetMovieDirectory_SetDimensions);

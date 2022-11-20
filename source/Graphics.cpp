@@ -122,6 +122,13 @@ void CMR3Font_BlitText_RightAlign(uint8_t a1, const char* text, int posX, int po
 	CMR3Font_BlitText(a1, text, static_cast<int>(scaledWidth - offset), posY, a5, a6);
 }
 
+void Keyboard_DrawTextEntryBox_Center(int posX, int posY, int a3, int a4, uint32_t a5, int a6)
+{
+	const float scaledWidth = GetScaledResolutionWidth();
+	const int offset = posX - 320;
+	Keyboard_DrawTextEntryBox(static_cast<int>(scaledWidth / 2 + offset), posY, a3, a4, a5, a6);
+}
+
 void Graphics_Viewports_SetAspectRatios()
 {
 	const float Width = static_cast<float>(GetResolutionWidth());

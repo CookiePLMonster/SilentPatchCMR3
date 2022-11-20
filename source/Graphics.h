@@ -142,6 +142,8 @@ inline void (*Core_Blitter2D_Line2D_G)(float* data, uint32_t numLines);
 inline void (*HandyFunction_Draw2DBox)(int posX, int posY, int width, int height, int color);
 inline void (*CMR3Font_BlitText)(uint8_t a1, const char* text, int posX, int posY, int a5, char a6);
 
+inline void (*Keyboard_DrawTextEntryBox)(int posX, int posY, int a3, int a4, uint32_t a5, int a6);
+
 inline int32_t (*GetNumPlayers)();
 
 inline D3DViewport** gViewports;
@@ -157,6 +159,8 @@ void HandyFunction_Draw2DBox_Stretch(int posX, int posY, int width, int height, 
 void HandyFunction_Draw2DBox_RightAlign(int posX, int posY, int width, int height, int color);
 void CMR3Font_BlitText_Center(uint8_t a1, const char* text, int posX, int posY, int a5, char a6);
 void CMR3Font_BlitText_RightAlign(uint8_t a1, const char* text, int posX, int posY, int a5, char a6);
+
+void Keyboard_DrawTextEntryBox_Center(int posX, int posY, int a3, int a4, uint32_t a5, int a6);
 
 void Graphics_Viewports_SetAspectRatios();
 
