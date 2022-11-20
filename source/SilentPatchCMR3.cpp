@@ -18,6 +18,8 @@
 #include <map>
 #include <vector>
 
+#include <DirectXMath.h>
+
 #pragma comment(lib, "winmm.lib")
 
 char GetRegistryEntryChar(LPCWSTR subKey, LPCWSTR valueName)
@@ -448,10 +450,110 @@ namespace ResolutionsList
 
 namespace HalfPixel
 {
+	using namespace DirectX;
+
 	static float OffsetTexel(float val)
 	{
 		return std::ceil(val) - 0.5f;
 	}
+
+	struct BlitLine2D_G
+	{
+		uint32_t color[2];
+		float X[2];
+		float Y[2];
+		float Z[2];
+	};
+	static_assert(sizeof(BlitLine2D_G) == 32, "Wrong size: BlitLine2D_G");
+
+	struct BlitLine3D_G
+	{
+		float X1, Y1, Z1, W1;
+		float X2, Y2, Z2, W2;
+		uint32_t color[2];
+		float _gap3[2];
+	};
+	static_assert(sizeof(BlitLine3D_G) == 48, "Wrong size: BlitLine3D_G");
+
+	struct BlitTri2D_G
+	{
+		uint32_t color[3];
+		float X[3];
+		float Y[3];
+		float Z;
+	};
+	static_assert(sizeof(BlitTri2D_G) == 40, "Wrong size: BlitTri2D_G");
+
+	struct BlitTri3D_G
+	{
+		float X1, Y1, Z1, W1;
+		float X2, Y2, Z2, W2;
+		float X3, Y3, Z3, W3;
+		uint32_t color[3];
+		float _gap2;
+
+	};
+	static_assert(sizeof(BlitTri3D_G) == 64, "Wrong size: BlitTri3D_G");
+
+	static XMVECTOR ComputePoint(float x, float y, const XMMATRIX& rot, const XMVECTOR& trans)
+	{
+		return XMVectorAdd(trans, XMVector2TransformNormal(XMVectorSet(x, y, 0.0f, 0.0f), rot));
+	}
+
+	static float ComputeConstantScale(const XMVECTOR& pos, const XMMATRIX& view, const XMFLOAT4X4& proj)
+	{
+		const XMVECTOR ppcam0 = XMVector4Transform(pos, view);
+		const XMVECTOR ppcam1 = XMVectorAdd(ppcam0, XMVectorSet(1.0f, 0.0f, 0.0f, 0.0f));
+
+		const XMVECTOR column0 = XMVectorSet(proj.m[0][0], proj.m[1][0], proj.m[2][0], 0.0f);
+		const XMVECTOR column3 = XMVectorSet(proj.m[0][3], proj.m[1][3], proj.m[2][3], 0.0f);
+
+		const float l1 = 1.0f / (XMVectorGetX(XMVector3Dot(ppcam0, column3)) + proj.m[3][3]);
+		const float c1 = (XMVectorGetX(XMVector3Dot(ppcam0, column0)) + proj.m[3][0]) * l1;
+		const float l2 = 1.0f / (XMVectorGetX(XMVector3Dot(ppcam1, column3)) + proj.m[3][3]);
+		const float c2 = (XMVectorGetX(XMVector3Dot(ppcam1, column0)) + proj.m[3][0]) * l2;
+		return 1.0f / ((c2 - c1) * GetResolutionWidth());
+	}
+
+	// This and the above functions have been adapted for the game from "Textured Lines In D3D" by Pierre Terdiman
+	// https://www.flipcode.com/archives/Textured_Lines_In_D3D.shtml
+	void ComputeScreenQuad(const XMMATRIX& inverseview, const XMMATRIX& view, const XMFLOAT4X4* proj, XMVECTOR* verts, const XMVECTOR& p0, const XMVECTOR& p1, float size)
+	{
+		// Compute delta in camera space
+		const XMVECTOR Delta = XMVector3TransformNormal(p1-p0, view);
+
+		// Compute size factors
+		float SizeP0 = size;
+		float SizeP1 = size;
+
+		if(proj != nullptr)
+		{
+			// Compute scales so that screen-size is constant
+			SizeP0 *= ComputeConstantScale(p0, view, *proj);
+			SizeP1 *= ComputeConstantScale(p1, view, *proj);
+		}
+		else
+		{
+			SizeP0 /= 2.0f;
+			SizeP1 /= 2.0f;
+		}
+
+		// Compute quad vertices
+		const float Theta0 = atan2f(-XMVectorGetX(Delta), -XMVectorGetY(Delta));
+		const float c0 = SizeP0 * std::cos(Theta0);
+		const float s0 = SizeP0 * std::sin(Theta0);
+		*verts++ = ComputePoint(c0, -s0, inverseview, p0);
+		*verts++ = ComputePoint(-c0, s0, inverseview, p0);
+
+		const float Theta1 = atan2f(XMVectorGetX(Delta), XMVectorGetY(Delta));
+		const float c1 = SizeP1 * std::cos(Theta1);
+		const float s1 = SizeP1 * std::sin(Theta1);
+		*verts++ = ComputePoint(-c1, s1, inverseview, p1);
+		*verts++ = ComputePoint(c1, -s1, inverseview, p1);
+	}
+
+	void (*Core_Blitter2D_Tri2D_G)(BlitTri2D_G* tris, uint32_t numTris);
+	void (*Core_Blitter3D_Tri3D_G)(BlitTri3D_G* tris, uint32_t numTris);
 
 	static void** dword_936C0C;
 
@@ -505,6 +607,131 @@ namespace HalfPixel
 			vert[11] = OffsetTexel(vert[11]);
 		}
 		Core_Blitter2D_Rect2D_GT_Original(verts, numRectangles);
+	}
+
+	static D3DMATRIX* pViewMatrix;
+	static D3DMATRIX* pProjectionMatrix;
+
+	static void* Core_Blitter2D_Line2D_G_JumpBack;
+	__declspec(naked) void Core_Blitter2D_Line2D_G_Original(BlitLine2D_G*, uint32_t)
+	{
+		__asm
+		{
+			sub		esp, 010h
+			mov		ecx, dword ptr [dword_936C0C]
+			mov		ecx, dword ptr [ecx]
+			jmp		[Core_Blitter2D_Line2D_G_JumpBack]
+		}	
+	}
+
+	void Core_Blitter2D_Line2D_G_HalfPixelAndThickness(BlitLine2D_G* lines, uint32_t numLines)
+	{
+#ifndef NDEBUG
+		if (GetAsyncKeyState(VK_F1) & 0x8000)
+		{
+			Core_Blitter2D_Line2D_G_Original(lines, numLines);
+			return;
+		}
+#endif
+
+		auto buf = _malloca(sizeof(BlitTri2D_G) * 2 * numLines);
+		if (buf != nullptr)
+		{
+			using namespace DirectX;
+
+			const XMMATRIX identityMatrix = XMMatrixIdentity();
+			const float targetThickness = GetResolutionHeight() / 480.0f;
+
+			BlitTri2D_G* tris = reinterpret_cast<BlitTri2D_G*>(buf);
+			BlitTri2D_G* currentTri = tris;
+			for (uint32_t i = 0; i < numLines; i++)
+			{
+				XMVECTOR quad[4];
+				ComputeScreenQuad(identityMatrix, identityMatrix, nullptr, quad, XMVectorSet(lines[i].X[0], lines[i].Y[0], 0.0f, 0.0f),
+													XMVectorSet(lines[i].X[1], lines[i].Y[1], 0.0f, 0.0f), targetThickness);
+
+				// Make triangles from quad
+				currentTri->X[0] = OffsetTexel(XMVectorGetX(quad[1]));
+				currentTri->Y[0] = OffsetTexel(XMVectorGetY(quad[1]));
+				currentTri->X[1] = OffsetTexel(XMVectorGetX(quad[0]));
+				currentTri->Y[1] = OffsetTexel(XMVectorGetY(quad[0]));
+				currentTri->X[2] = OffsetTexel(XMVectorGetX(quad[2]));
+				currentTri->Y[2] = OffsetTexel(XMVectorGetY(quad[2]));
+				currentTri->Z = lines[i].Z[0];
+				std::fill(std::begin(currentTri->color), std::end(currentTri->color), lines[i].color[0]);
+				currentTri++;
+
+				currentTri->X[0] = OffsetTexel(XMVectorGetX(quad[2]));
+				currentTri->Y[0] = OffsetTexel(XMVectorGetY(quad[2]));
+				currentTri->X[1] = OffsetTexel(XMVectorGetX(quad[3]));
+				currentTri->Y[1] = OffsetTexel(XMVectorGetY(quad[3]));
+				currentTri->X[2] = OffsetTexel(XMVectorGetX(quad[1]));
+				currentTri->Y[2] = OffsetTexel(XMVectorGetY(quad[1]));
+				currentTri->Z = lines[i].Z[0];
+				std::fill(std::begin(currentTri->color), std::end(currentTri->color), lines[i].color[1]);
+				currentTri++;
+			}
+
+			Core_Blitter2D_Tri2D_G(tris, 2 * numLines);
+		}
+		_freea(buf);
+	}
+
+	static void* Core_Blitter3D_Line3D_G_JumpBack;
+	__declspec(naked) void Core_Blitter3D_Line3D_G_Original(BlitLine3D_G*, uint32_t)
+	{
+		__asm
+		{
+			push	ebp
+			mov		ebp, esp
+			sub		esp, 8
+			jmp		[Core_Blitter3D_Line3D_G_JumpBack]
+		}
+	}
+
+	void Core_Blitter3D_Line3D_G_LineThickness(BlitLine3D_G* lines, uint32_t numLines)
+	{
+#ifndef NDEBUG
+		if (GetAsyncKeyState(VK_F1) & 0x8000)
+		{
+			Core_Blitter3D_Line3D_G_Original(lines, numLines);
+			return;
+		}
+#endif
+
+		auto buf = _malloca(sizeof(BlitTri3D_G) * 2 * numLines);
+		if (buf != nullptr)
+		{
+			const XMMATRIX viewMatrix = XMLoadFloat4x4(reinterpret_cast<XMFLOAT4X4*>(pViewMatrix));
+			const XMMATRIX invViewMatrix = XMMatrixInverse(nullptr, viewMatrix);
+
+			const float targetThickness = GetResolutionHeight() / 480.0f;
+
+			BlitTri3D_G* tris = reinterpret_cast<BlitTri3D_G*>(buf);
+			BlitTri3D_G* currentTri = tris;
+			for (uint32_t i = 0; i < numLines; i++)
+			{
+				XMVECTOR quad[4];
+				ComputeScreenQuad(invViewMatrix, viewMatrix, reinterpret_cast<const XMFLOAT4X4*>(pProjectionMatrix), quad,
+					XMLoadFloat4(reinterpret_cast<XMFLOAT4*>(&lines[i].X1)), XMLoadFloat4(reinterpret_cast<XMFLOAT4*>(&lines[i].X2)), targetThickness);
+
+				// Make triangles from quad
+				XMStoreFloat4(reinterpret_cast<XMFLOAT4*>(&currentTri->X1), quad[1]);
+				XMStoreFloat4(reinterpret_cast<XMFLOAT4*>(&currentTri->X2), quad[0]);
+				XMStoreFloat4(reinterpret_cast<XMFLOAT4*>(&currentTri->X3), quad[2]);
+				std::fill(std::begin(currentTri->color), std::end(currentTri->color), lines[i].color[0]);
+				currentTri++;
+
+				XMStoreFloat4(reinterpret_cast<XMFLOAT4*>(&currentTri->X1), quad[2]);
+				XMStoreFloat4(reinterpret_cast<XMFLOAT4*>(&currentTri->X2), quad[3]);
+				XMStoreFloat4(reinterpret_cast<XMFLOAT4*>(&currentTri->X3), quad[1]);
+				std::fill(std::begin(currentTri->color), std::end(currentTri->color), lines[i].color[1]);
+				currentTri++;
+			}
+
+			Core_Blitter3D_Tri3D_G(tris, 2 * numLines);
+		}
+		_freea(buf);
 	}
 }
 
@@ -835,13 +1062,22 @@ void OnInitializeHook()
 	TXN_CATCH();
 
 
-	// Fixed half pixel issues
+	// Fixed half pixel issues, and added line thickness
 	try
 	{
 		using namespace HalfPixel;
 
 		auto Blitter2D_Rect2D_G = pattern("76 39 8B 7C 24 3C").get_one();
 		auto Blitter2D_Rect2D_GT = reinterpret_cast<intptr_t>(ReadCallFrom(get_pattern("E8 ? ? ? ? A1 ? ? ? ? 45 83 C3 40")));
+		auto Blitter2D_Line2D_G = pattern("8B 7C 24 28 1B C0").get_one();
+		auto Blitter3D_Line3D_G = pattern("8B 75 0C 8B C2").get_one();
+		auto matrices = pattern("BF ? ? ? ? F3 AB C7 05").get_one();
+
+		Core_Blitter2D_Tri2D_G = reinterpret_cast<decltype(Core_Blitter2D_Tri2D_G)>(get_pattern("3B F2 57 76 3E", -0x30));
+		Core_Blitter3D_Tri3D_G = reinterpret_cast<decltype(Core_Blitter3D_Tri3D_G)>(get_pattern("57 8B 7D 0C 8B C1", -0xD));
+
+		pViewMatrix = *matrices.get<D3DMATRIX*>(-0xC + 1);
+		pProjectionMatrix = *matrices.get<D3DMATRIX*>(1);
 
 		dword_936C0C = *Blitter2D_Rect2D_G.get<void**>(-0x50 + 4);
 		Core_Blitter2D_Rect2D_G_JumpBack = Blitter2D_Rect2D_G.get<void>(-0x50 + 8);
@@ -849,6 +1085,19 @@ void OnInitializeHook()
 
 		Core_Blitter2D_Rect2D_GT_JumpBack = reinterpret_cast<void*>(Blitter2D_Rect2D_GT + 8);
 		InjectHook(Blitter2D_Rect2D_GT, Core_Blitter2D_Rect2D_GT_HalfPixel, PATCH_JUMP);
+
+		Core_Blitter2D_Line2D_G_JumpBack = Blitter2D_Line2D_G.get<void>(-0x17 + 9);
+		InjectHook(Blitter2D_Line2D_G.get<void>(-0x17), Core_Blitter2D_Line2D_G_HalfPixelAndThickness, PATCH_JUMP);
+		// Do not recurse into the custom function to avoid super-thick lines
+		InjectHook(Blitter2D_Line2D_G.get<void>(0x2C), Core_Blitter2D_Line2D_G_Original);
+		InjectHook(Blitter2D_Line2D_G.get<void>(0x44), Core_Blitter2D_Line2D_G_Original);
+
+		Core_Blitter3D_Line3D_G_JumpBack = Blitter3D_Line3D_G.get<void>(-0xD + 6);
+		InjectHook(Blitter3D_Line3D_G.get<void>(-0xD), Core_Blitter3D_Line3D_G_LineThickness, PATCH_JUMP);
+		// Do not recurse into the custom function
+		InjectHook(Blitter3D_Line3D_G.get<void>(0x34), Core_Blitter3D_Line3D_G_Original);
+		InjectHook(Blitter3D_Line3D_G.get<void>(0x52), Core_Blitter3D_Line3D_G_Original);
+
 	}
 	TXN_CATCH();
 
