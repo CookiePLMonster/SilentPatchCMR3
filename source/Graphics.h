@@ -136,7 +136,7 @@ inline uint32_t (*GetResolutionWidth)();
 inline uint32_t (*GetResolutionHeight)();
 
 inline void (*Core_Blitter2D_Rect2D_G)(float* data, uint32_t numRectangles);
-inline void (*Core_Blitter2D_Quad2D_GT)(float* data, uint32_t numRectangles);
+inline void (*Core_Blitter2D_Rect2D_GT)(float* data, uint32_t numRectangles);
 inline void (*Core_Blitter2D_Line2D_G)(float* data, uint32_t numLines);
 
 inline void (*HandyFunction_Draw2DBox)(int posX, int posY, int width, int height, int color);
@@ -153,7 +153,7 @@ float GetScaledResolutionWidth();
 
 void Core_Blitter2D_Rect2D_G_Center(float* data, uint32_t numRectangles);
 void Core_Blitter2D_Line2D_G_Center(float* data, uint32_t numLines);
-void Core_Blitter2D_Quad2D_GT_RightAlign(float* data, uint32_t numRectangles);
+void Core_Blitter2D_Rect2D_GT_RightAlign(float* data, uint32_t numRectangles);
 
 void HandyFunction_Draw2DBox_Stretch(int posX, int posY, int width, int height, int color);
 void HandyFunction_Draw2DBox_RightAlign(int posX, int posY, int width, int height, int color);

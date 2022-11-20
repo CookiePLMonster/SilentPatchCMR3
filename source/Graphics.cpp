@@ -80,7 +80,7 @@ void Core_Blitter2D_Line2D_G_Center(float* data, uint32_t numLines)
 	Core_Blitter2D_Line2D_G(data, numLines);
 }
 
-void Core_Blitter2D_Quad2D_GT_RightAlign(float* data, uint32_t numRectangles)
+void Core_Blitter2D_Rect2D_GT_RightAlign(float* data, uint32_t numRectangles)
 {
 	const float resolutionWidth = static_cast<float>(GetResolutionWidth());
 	const float scaledOldRight = 640.0f * (resolutionWidth / GetScaledResolutionWidth());
@@ -92,7 +92,7 @@ void Core_Blitter2D_Quad2D_GT_RightAlign(float* data, uint32_t numRectangles)
 		rect[8] += offset;
 		rect[9] += offset;
 	}
-	Core_Blitter2D_Quad2D_GT(data, numRectangles);
+	Core_Blitter2D_Rect2D_GT(data, numRectangles);
 }
 
 void HandyFunction_Draw2DBox_Stretch(int posX, int posY, int width, int height, int color)

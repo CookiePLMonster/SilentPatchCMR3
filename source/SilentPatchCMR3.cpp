@@ -453,7 +453,20 @@ namespace HalfPixel
 		return std::ceil(val) - 0.5f;
 	}
 
-	void (*orgCore_Blitter2D_Rect2D_G)(float* verts, uint32_t numVerts);
+	static void** dword_936C0C;
+
+	static void* Core_Blitter2D_Rect2D_G_JumpBack;
+	__declspec(naked) void Core_Blitter2D_Rect2D_G_Original(float*, uint32_t)
+	{
+		__asm
+		{
+			sub		esp, 028h
+			mov		eax, dword ptr [dword_936C0C]
+			mov		eax, dword ptr [eax]
+			jmp		[Core_Blitter2D_Rect2D_G_JumpBack]
+		}
+	}
+
 	void Core_Blitter2D_Rect2D_G_HalfPixel(float* verts, uint32_t numVerts)
 	{
 		for (uint32_t i = 0; i < numVerts; i++)
@@ -465,11 +478,22 @@ namespace HalfPixel
 			vert[6] = OffsetTexel(vert[6]);
 			vert[7] = OffsetTexel(vert[7]);
 		}
-		orgCore_Blitter2D_Rect2D_G(verts, numVerts);
+		Core_Blitter2D_Rect2D_G_Original(verts, numVerts);
 	}
 
-	void (*orgCore_Blitter2D_Quad2D_GT)(float* verts, uint32_t numRectangles);
-	void Core_Blitter2D_Quad2D_GT_HalfPixel(float* verts, uint32_t numRectangles)
+	static void* Core_Blitter2D_Rect2D_GT_JumpBack;
+	__declspec(naked) void Core_Blitter2D_Rect2D_GT_Original(float*, uint32_t)
+	{
+		__asm
+		{
+			sub		esp, 028h
+			mov		eax, dword ptr [dword_936C0C]
+			mov		eax, dword ptr [eax]
+			jmp		[Core_Blitter2D_Rect2D_GT_JumpBack]
+		}
+	}
+
+	void Core_Blitter2D_Rect2D_GT_HalfPixel(float* verts, uint32_t numRectangles)
 	{
 		for (uint32_t i = 0; i < numRectangles; i++)
 		{
@@ -480,7 +504,7 @@ namespace HalfPixel
 			vert[10] = OffsetTexel(vert[10]);
 			vert[11] = OffsetTexel(vert[11]);
 		}
-		orgCore_Blitter2D_Quad2D_GT(verts, numRectangles);
+		Core_Blitter2D_Rect2D_GT_Original(verts, numRectangles);
 	}
 }
 
@@ -811,19 +835,20 @@ void OnInitializeHook()
 	TXN_CATCH();
 
 
-	// Fixed half pixel issues on solid backgrounds
+	// Fixed half pixel issues
 	try
 	{
 		using namespace HalfPixel;
 
-		auto draw_solid_background = get_pattern("D9 5C 24 58 DD D8 E8", 6);
-		auto draw_font = get_pattern("E8 ? ? ? ? A1 ? ? ? ? 45 83 C3 40");
+		auto Blitter2D_Rect2D_G = pattern("76 39 8B 7C 24 3C").get_one();
+		auto Blitter2D_Rect2D_GT = reinterpret_cast<intptr_t>(ReadCallFrom(get_pattern("E8 ? ? ? ? A1 ? ? ? ? 45 83 C3 40")));
 
-		ReadCall(draw_solid_background, orgCore_Blitter2D_Rect2D_G);
-		InjectHook(draw_solid_background, Core_Blitter2D_Rect2D_G_HalfPixel);
+		dword_936C0C = *Blitter2D_Rect2D_G.get<void**>(-0x50 + 4);
+		Core_Blitter2D_Rect2D_G_JumpBack = Blitter2D_Rect2D_G.get<void>(-0x50 + 8);
+		InjectHook(Blitter2D_Rect2D_G.get<void>(-0x50), Core_Blitter2D_Rect2D_G_HalfPixel, PATCH_JUMP);
 
-		ReadCall(draw_font, orgCore_Blitter2D_Quad2D_GT);
-		InjectHook(draw_font, Core_Blitter2D_Quad2D_GT_HalfPixel);
+		Core_Blitter2D_Rect2D_GT_JumpBack = reinterpret_cast<void*>(Blitter2D_Rect2D_GT + 8);
+		InjectHook(Blitter2D_Rect2D_GT, Core_Blitter2D_Rect2D_GT_HalfPixel, PATCH_JUMP);
 	}
 	TXN_CATCH();
 
@@ -882,7 +907,7 @@ void OnInitializeHook()
 
 			Core_Blitter2D_Rect2D_G = reinterpret_cast<decltype(Core_Blitter2D_Rect2D_G)>(ReadCallFrom(get_pattern("E8 ? ? ? ? 8D 44 24 68")));
 			Core_Blitter2D_Line2D_G = reinterpret_cast<decltype(Core_Blitter2D_Line2D_G)>(get_pattern("F7 D8 57", -0x14));
-			Core_Blitter2D_Quad2D_GT = reinterpret_cast<decltype(Core_Blitter2D_Quad2D_GT)>(ReadCallFrom(get_pattern("DD D8 E8 ? ? ? ? 8B 7C 24 30", 2)));
+			Core_Blitter2D_Rect2D_GT = reinterpret_cast<decltype(Core_Blitter2D_Rect2D_GT)>(ReadCallFrom(get_pattern("DD D8 E8 ? ? ? ? 8B 7C 24 30", 2)));
 
 			auto initialise = get_pattern("E8 ? ? ? ? 8B 54 24 24 89 5C 24 18");
 			auto reinitialise = get_pattern("E8 ? ? ? ? 8B 15 ? ? ? ? A1 ? ? ? ? 8B 0D");
@@ -1150,23 +1175,23 @@ void OnInitializeHook()
 
 			post_race_certina_logos1.for_each_result([](pattern_match match)
 			{
-				InjectHook(match.get<void>(), Core_Blitter2D_Quad2D_GT_RightAlign);
+				InjectHook(match.get<void>(), Core_Blitter2D_Rect2D_GT_RightAlign);
 			});
 			post_race_certina_logos2.for_each_result([](pattern_match match)
 			{
-				InjectHook(match.get<void>(), Core_Blitter2D_Quad2D_GT_RightAlign);
+				InjectHook(match.get<void>(), Core_Blitter2D_Rect2D_GT_RightAlign);
 			});
 			post_race_certina_logos3.for_each_result([](pattern_match match)
 			{
-				InjectHook(match.get<void>(), Core_Blitter2D_Quad2D_GT_RightAlign);
+				InjectHook(match.get<void>(), Core_Blitter2D_Rect2D_GT_RightAlign);
 			});
 			post_race_certina_logos4.for_each_result([](pattern_match match)
 			{
-				InjectHook(match.get<void>(), Core_Blitter2D_Quad2D_GT_RightAlign);
+				InjectHook(match.get<void>(), Core_Blitter2D_Rect2D_GT_RightAlign);
 			});
 			post_race_flags.for_each_result([](pattern_match match)
 			{
-				InjectHook(match.get<void>(), Core_Blitter2D_Quad2D_GT_RightAlign);
+				InjectHook(match.get<void>(), Core_Blitter2D_Rect2D_GT_RightAlign);
 			});
 			post_race_centered_texts1.for_each_result([](pattern_match match)
 			{
