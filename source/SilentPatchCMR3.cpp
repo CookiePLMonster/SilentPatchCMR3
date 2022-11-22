@@ -275,6 +275,18 @@ namespace QuitMessageFix
 	auto* const pPostQuitMessage_AndRequestExit = &PostQuitMessage_AndRequestExit;
 }
 
+namespace TelemetryFadingLegend
+{
+	static int8_t originalWidth, originalHeight;
+
+	void (*orgHandyFunction_Draw2DBox)(int posX, int posY, int width, int height, int color);
+	void Draw2DBox_HackedAlpha(int posX, int posY, uint32_t alpha, uint32_t color)
+	{
+		// Parameters width and height got replaced by alpha
+		orgHandyFunction_Draw2DBox(posX, posY, originalWidth, originalHeight, HandyFunction_AlphaCombineFlat(color, alpha));
+	}
+}
+
 namespace Timers
 {
 	static int64_t GetQPC()
@@ -1556,6 +1568,26 @@ void OnInitializeHook()
 		Patch<uint8_t>(&wndproc_messages_indirect_array[WM_CLOSE - 2], def_proc);
 
 		Patch(post_quit_message, &pPostQuitMessage_AndRequestExit);
+	}
+	TXN_CATCH();
+
+
+	// Fixed legend not fading on the telemetry screen
+	try
+	{
+		using namespace TelemetryFadingLegend;
+
+		auto draw_2d_box = pattern("6A ? 6A ? 8D 54 0A 19").get_one();
+
+		originalHeight = *draw_2d_box.get<int8_t>(1);
+		originalWidth = *draw_2d_box.get<int8_t>(3);
+
+		// push dword ptr [esp+110h-D8h]
+		Patch(draw_2d_box.get<void>(), { 0xFF, 0x74, 0x24, 0x38 });
+		Patch<int8_t>(draw_2d_box.get<void>(10 + 3), 0x118 - 0xDC);
+
+		ReadCall(draw_2d_box.get<void>(18), orgHandyFunction_Draw2DBox);
+		InjectHook(draw_2d_box.get<void>(18), Draw2DBox_HackedAlpha);
 	}
 	TXN_CATCH();
 }

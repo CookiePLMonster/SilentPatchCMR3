@@ -156,11 +156,14 @@ void Core_Blitter2D_Line2D_G_Center(float* data, uint32_t numLines);
 void Core_Blitter2D_Rect2D_GT_RightAlign(float* data, uint32_t numRectangles);
 
 void HandyFunction_Draw2DBox_Stretch(int posX, int posY, int width, int height, int color);
+void HandyFunction_Draw2DBox_Center(int posX, int posY, int width, int height, int color);
 void HandyFunction_Draw2DBox_RightAlign(int posX, int posY, int width, int height, int color);
 void CMR3Font_BlitText_Center(uint8_t a1, const char* text, int posX, int posY, int a5, char a6);
 void CMR3Font_BlitText_RightAlign(uint8_t a1, const char* text, int posX, int posY, int a5, char a6);
 
 void Keyboard_DrawTextEntryBox_Center(int posX, int posY, int a3, int a4, uint32_t a5, int a6);
+
+uint32_t HandyFunction_AlphaCombineFlat(uint32_t color, uint32_t alpha);
 
 void Graphics_Viewports_SetAspectRatios();
 

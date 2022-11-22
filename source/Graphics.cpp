@@ -101,6 +101,13 @@ void HandyFunction_Draw2DBox_Stretch(int posX, int posY, int width, int height, 
 	HandyFunction_Draw2DBox(posX, posY, static_cast<int>(std::ceil(width * widthScale)), height, color);
 }
 
+void HandyFunction_Draw2DBox_Center(int posX, int posY, int width, int height, int color)
+{
+	const float scaledWidth = GetScaledResolutionWidth();
+	const int offset = posX - 320;
+	HandyFunction_Draw2DBox(static_cast<int>(scaledWidth / 2 + offset), posY, width + 1, height, color);
+}
+
 void HandyFunction_Draw2DBox_RightAlign(int posX, int posY, int width, int height, int color)
 {
 	const float scaledWidth = GetScaledResolutionWidth();
@@ -127,6 +134,13 @@ void Keyboard_DrawTextEntryBox_Center(int posX, int posY, int a3, int a4, uint32
 	const float scaledWidth = GetScaledResolutionWidth();
 	const int offset = posX - 320;
 	Keyboard_DrawTextEntryBox(static_cast<int>(scaledWidth / 2 + offset), posY, a3, a4, a5, a6);
+}
+
+uint32_t HandyFunction_AlphaCombineFlat(uint32_t color, uint32_t alpha)
+{
+	const uint8_t colorAlpha = (color >> 24) & 0xFF;
+	const uint32_t colorBlendedAlpha = (colorAlpha * alpha) / 255;
+	return (color & 0xFFFFFF) | (colorBlendedAlpha << 24);
 }
 
 void Graphics_Viewports_SetAspectRatios()
