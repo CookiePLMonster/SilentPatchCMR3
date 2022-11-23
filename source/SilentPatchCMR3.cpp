@@ -652,8 +652,8 @@ namespace HalfPixel
 			for (uint32_t i = 0; i < numLines; i++)
 			{
 				XMVECTOR quad[4];
-				ComputeScreenQuad(identityMatrix, identityMatrix, nullptr, quad, XMVectorSet(lines[i].X[0], lines[i].Y[0], 0.0f, 0.0f),
-													XMVectorSet(lines[i].X[1], lines[i].Y[1], 0.0f, 0.0f), targetThickness);
+				ComputeScreenQuad(identityMatrix, identityMatrix, nullptr, quad, XMVectorSet(lines[i].X[0], lines[i].Y[0], 0.0f, 1.0f),
+													XMVectorSet(lines[i].X[1], lines[i].Y[1], 0.0f, 1.0f), targetThickness);
 
 				// Make triangles from quad
 				currentTri->X[0] = OffsetTexel(XMVectorGetX(quad[1]));
@@ -718,7 +718,7 @@ namespace HalfPixel
 			{
 				XMVECTOR quad[4];
 				ComputeScreenQuad(invViewMatrix, viewMatrix, reinterpret_cast<const XMFLOAT4X4*>(pProjectionMatrix), quad,
-					XMLoadFloat4(reinterpret_cast<XMFLOAT4*>(&lines[i].X1)), XMLoadFloat4(reinterpret_cast<XMFLOAT4*>(&lines[i].X2)), targetThickness);
+					XMVectorSet(lines[i].X1, lines[i].Y1, lines[i].Z1, 1.0f), XMVectorSet(lines[i].X2, lines[i].Y2, lines[i].Z2, 1.0f), targetThickness);
 
 				// Make triangles from quad
 				XMStoreFloat4(reinterpret_cast<XMFLOAT4*>(&currentTri->X1), quad[1]);
