@@ -1204,6 +1204,16 @@ void OnInitializeHook()
 				});
 			};
 
+			auto patch_field_center = [](std::string_view str, ptrdiff_t offset)
+			{
+				pattern(str).for_each_result([offset](pattern_match match)
+				{
+					int32_t* const addr = match.get<int32_t>(offset);
+					const int32_t val = *addr;
+					UI_CenteredElements.emplace_back(std::in_place_type<Int32Patch>, addr, val);
+				});
+			};
+
 			UI_resolutionWidthMult = *get_pattern<float*>("DF 6C 24 18 D8 0D ? ? ? ? D9 5C 24 38", 4+2);
 			UI_RightAlignElements.emplace_back(std::in_place_type<FloatPatch>, *get_pattern<float*>("D8 3D ? ? ? ? D9 5C 24 18", 2), 640.0f);
 
@@ -1305,6 +1315,9 @@ void OnInitializeHook()
 
 			// CMR3 logo in menus
 			UI_RightAlignElements.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("68 ? ? ? ? 6A 40 6A 40", 1), 519);
+
+			// CMR3 logo in the engagement screen
+			patch_field_center("68 C0 00 00 00 68", 1);
 			
 			auto post_race_certina_logos1 = pattern("E8 ? ? ? ? 6A 15 E8 ? ? ? ? 50").count(5);
 			auto post_race_certina_logos2 = pattern("E8 ? ? ? ? 68 51 02 00 00").count(2);
@@ -1351,6 +1364,52 @@ void OnInitializeHook()
 			auto osd_keyboard_blit_text_centered4 = pattern("E8 ? ? ? ? A1 ? ? ? ? 8B 54 24 18 52 53 50").count(3);
 			void* osd_keyboard_best_score_text = get_pattern("E8 ? ? ? ? 8B 7D 14 C1 EF 0A");
 			void* osd_keyboard_access_code_text = get_pattern("6A 0C E8 ? ? ? ? 8B 6C 24 24", 2);
+
+			// Engagement screen
+			auto engagement_screen_press_return_text1 = pattern("68 ? ? ? ? 6A 0C E8 ? ? ? ? D9 44 24").count(10);
+
+			// Telemetry screen
+			void* telemetry_legend_boxes_centered = get_pattern("E8 ? ? ? ? 8B 15 ? ? ? ? 6A 22");
+			void* telemetry_texts_centered[] = {
+				get_pattern("E8 ? ? ? ? 81 C7 ? ? ? ? 83 C5 04"),
+				get_pattern("83 C4 08 50 53 E8", 5),
+				get_pattern("E8 ? ? ? ? 8B 44 24 1C 8B 54 24 28"),
+			};
+			auto telemetry_lines1 = pattern("D8 C9 D9 5C 24 ? DD D8 E8 ? ? ? ? 83 C5 20").count(3);
+			auto telemetry_lines2 = pattern("D8 C9 D9 9C 24 ? ? ? ? DD D8 E8 ? ? ? ? 83 C5 20").count(3);
+
+			// Secrets screen
+			// The amount of texts to patch differs between executables, so a range check is needed
+			auto secrets_begin = pattern("C7 05 ? ? ? ? 80 02 00 00 D9 44 24 20").get_one();
+			auto secrets_end = get_pattern_uintptr("89 44 24 1C 3B FA");
+			auto secrets_centered_texts1 = pattern(secrets_begin.get_uintptr(), secrets_end, "68 40 01 00 00 68 ? ? ? ? E8 ? ? ? ? 50 6A ? E8");
+			auto secrets_centered_texts2 = pattern(secrets_begin.get_uintptr(), secrets_end, "68 40 01 00 00 68 ? ? ? ? 6A ? E8");
+
+			UI_RightAlignElements.emplace_back(std::in_place_type<Int32Patch>, secrets_begin.get<int32_t>(6), 640);
+			UI_RightAlignElements.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("C7 05 ? ? ? ? ? ? ? ? E8 ? ? ? ? 68 ? ? ? ? 55", 6), 640); 
+			UI_RightAlignElements.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("BF ? ? ? ? 2B F9", 1), 640);
+			UI_RightAlignElements.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("BF ? ? ? ? 2B FA 2B F9", 1), 640);
+
+			// "Original settings will be restored in X seconds" dialogs
+			// + slot delete
+			void* settings_reset_dialog_backgrounds[] = {
+				get_pattern("DD D8 E8 ? ? ? ? E8 ? ? ? ? 68", 2),
+				get_pattern("DD D8 E8 ? ? ? ? E8 ? ? ? ? 8B C8", 2),
+			};
+
+			void* settings_reset_dialog_texts[] = {
+				get_pattern("E8 ? ? ? ? 68 ? ? ? ? E8 ? ? ? ? 50 8D 4C 24 68"),
+				get_pattern("E8 ? ? ? ? 68 ? ? ? ? E8 ? ? ? ? 50 56"),
+				get_pattern("51 6A 00 E8 ? ? ? ? 5F 5E 5B", 3),
+
+				get_pattern("E8 ? ? ? ? 68 ? ? ? ? E8 ? ? ? ? 50 8D 44 24 68"),
+				get_pattern("E8 ? ? ? ? 68 ? ? ? ? E8 ? ? ? ? 50 8D 54 24 68"),
+				get_pattern("68 ? ? ? ? 50 6A 00 E8 ? ? ? ? 5F", 8),
+
+				get_pattern("E8 ? ? ? ? 5E 8B 54 24 0C"),
+			};
+
+			patch_field_center("BA ? ? ? ? D1 F8", 1);
 
 			// Movie rendering
 			auto movie_rect = pattern("C7 05 ? ? ? ? 00 00 00 BF C7 05 ? ? ? ? 00 00 00 BF").get_one();
@@ -1539,6 +1598,43 @@ void OnInitializeHook()
 			InjectHook(osd_keyboard_best_score_text, CMR3Font_BlitText_Center);
 			InjectHook(osd_keyboard_access_code_text, CMR3Font_BlitText_RightAlign);
 
+			engagement_screen_press_return_text1.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(5 + 2), CMR3Font_BlitText_Center);
+			});
+
+			InjectHook(telemetry_legend_boxes_centered, HandyFunction_Draw2DBox_Center);
+			for (void* addr : telemetry_texts_centered)
+			{
+				InjectHook(addr, CMR3Font_BlitText_Center);
+			}
+			telemetry_lines1.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(8), Core_Blitter2D_Line2D_G_Center);
+			});
+			telemetry_lines2.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(11), Core_Blitter2D_Line2D_G_Center);
+			});
+
+			secrets_centered_texts1.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(18), CMR3Font_BlitText_Center);
+			});
+			secrets_centered_texts2.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(12), CMR3Font_BlitText_Center);
+			});
+
+			for (void* addr : settings_reset_dialog_backgrounds)
+			{
+				InjectHook(addr, Core_Blitter2D_Rect2D_G_Center);
+			}
+			for (void* addr : settings_reset_dialog_texts)
+			{
+				InjectHook(addr, CMR3Font_BlitText_Center);
+			}
+			
 			ReadCall(movie_name_setdir, orgSetMovieDirectory);
 			InjectHook(movie_name_setdir, SetMovieDirectory_SetDimensions);
 
