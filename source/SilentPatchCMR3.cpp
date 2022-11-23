@@ -8,6 +8,7 @@
 
 #include "Graphics.h"
 #include "Menus.h"
+#include "Registry.h"
 
 #include <d3d9.h>
 #include <wil/com.h>
@@ -21,14 +22,6 @@
 #include <DirectXMath.h>
 
 #pragma comment(lib, "winmm.lib")
-
-char GetRegistryEntryChar(LPCWSTR subKey, LPCWSTR valueName)
-{
-	wchar_t buf[12];
-	DWORD cbSize = sizeof(buf);
-	RegGetValueW(HKEY_LOCAL_MACHINE, subKey, valueName, RRF_RT_REG_SZ|RRF_ZEROONFAILURE, nullptr, buf, &cbSize);
-	return static_cast<char>(buf[0]);
-}
 
 namespace Localization
 {
@@ -73,7 +66,7 @@ namespace Localization
 	uint32_t (*orgGetLanguageIDByCode)(char code);
 	uint32_t GetCurrentLanguageID_Patched()
 	{
-		return orgGetLanguageIDByCode(GetRegistryEntryChar(L"SOFTWARE\\CODEMASTERS\\Colin McRae Rally 3", L"LANGUAGE"));
+		return orgGetLanguageIDByCode(Registry::GetRegistryChar(nullptr, "LANGUAGE"));
 	}
 
 	uint32_t (*orgGetCurrentLanguageID)();
@@ -1684,6 +1677,38 @@ void OnInitializeHook()
 
 		ReadCall(draw_2d_box.get<void>(18), orgHandyFunction_Draw2DBox);
 		InjectHook(draw_2d_box.get<void>(18), Draw2DBox_HackedAlpha);
+	}
+	TXN_CATCH();
+
+
+	// Make the game portable
+	// Removes settings from registry and reliance on INSTALL_PATH
+	try
+	{
+		using namespace Registry;
+
+		auto get_install_string_operator_new = get_pattern("E8 ? ? ? ? 8B 54 24 10 83 C4 04");
+		auto get_install_string = get_pattern("E8 ? ? ? ? 50 E8 ? ? ? ? 68 ? ? ? ? 8B D8 68");
+		auto get_registry_dword = get_pattern("75 6E 8B 4C 24 04", -0x29);
+		auto set_registry_dword = get_pattern("8D 54 24 0C 6A 04", -0x24);
+		auto set_registry_char = get_pattern("8B 4C 24 04 8D 54 24 0C 6A 01", -0x20);
+
+		ReadCall(get_install_string_operator_new, Patches::orgOperatorNew);
+		InjectHook(get_install_string, GetInstallString_Portable);
+
+		InjectHook(get_registry_dword, GetRegistryDword, PATCH_JUMP);
+		InjectHook(set_registry_dword, SetRegistryDword, PATCH_JUMP);
+		InjectHook(set_registry_char, SetRegistryChar, PATCH_JUMP);
+
+		// This one is optional! Polish exe lacks it
+		try
+		{
+			auto get_registry_char = get_pattern("75 5F 8B 4C 24 14", -0x21);
+			InjectHook(get_registry_char, GetRegistryChar, PATCH_JUMP);
+		}
+		TXN_CATCH();
+
+		Registry::Init();
 	}
 	TXN_CATCH();
 }
