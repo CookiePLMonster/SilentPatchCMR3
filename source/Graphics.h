@@ -1,5 +1,7 @@
 #pragma once
 
+#include <d3d9.h>
+
 #include <cstddef>
 #include <cstdint>
 #include <variant>
@@ -25,11 +27,35 @@ struct D3DViewport
 	int field_3C;
 	int field_40;
 	std::byte gap44[16];
-	struct IDirect3DSurface9 *m_pRenderTarget;
-	struct IDirect3DSurface9 *m_pDepthStencil;
+	IDirect3DSurface9 *m_pRenderTarget;
+	IDirect3DSurface9 *m_pDepthStencil;
 	int field_5C;
 };
 static_assert(sizeof(D3DViewport) == 0x60, "Wrong size: D3DViewport");
+
+struct D3DTexture
+{
+	D3DTexture *m_next;
+	uint32_t m_width;
+	uint32_t m_height;
+	D3DFORMAT m_format;
+	uint32_t m_usage;
+	D3DPOOL m_pool;
+	IDirect3DTexture9 *m_pTexture;
+	std::byte gap1C[12];
+	uint32_t m_levels;
+	std::byte gap2C[24];
+	int m_flags;
+	int field_48;
+	char m_name[16];
+	std::byte gap5C[4];
+	int field_60;
+	uint32_t m_mipFilter;
+	uint32_t m_magFilter;
+	uint32_t m_minFilter;
+	std::byte gap70[52];
+};
+static_assert(sizeof(D3DTexture) == 0xA4, "Wrong size: D3DTexture");
 
 struct OSD_Data
 {
@@ -126,6 +152,7 @@ struct Object_StartLight
 };
 static_assert(sizeof(Object_StartLight) == 0x5C, "Wrong size: Object_StartLight");
 
+void Core_Texture_SetFilteringMethod(D3DTexture* texture, uint32_t min, uint32_t mag, uint32_t mip);
 
 OSD_Element* OSD_Element_Init_Center(OSD_Element* element, int posX, int posY, int width, int height, int a6, int a7, int a8, int a9, int a10, int a11);
 OSD_Element* OSD_Element_Init_RightAlign(OSD_Element* element, int posX, int posY, int width, int height, int a6, int a7, int a8, int a9, int a10, int a11);

@@ -815,6 +815,132 @@ namespace ConstantViewports
 	}
 }
 
+namespace ScaledTexturesSupport
+{
+	template<std::size_t Index>
+	D3DTexture* (*orgCreateTexture_Misc_Scaled)(void* a1, const char* name, int a3, int a4, int a5);
+
+	template<std::size_t Index>
+	D3DTexture* CreateTexture_Misc_Scaled(void* a1, const char* name, int a3, int a4, int a5)
+	{
+		D3DTexture* result = orgCreateTexture_Misc_Scaled<Index>(a1, name, a3, a4, a5);
+		if (result != nullptr && name != nullptr)
+		{
+			static const std::map<std::string_view, std::pair<uint32_t, uint32_t>, std::less<>> textureDimensions = {
+				{ "Arrow1Player", { 32, 16 } },
+				{ "ArrowMultiPlayer", { 32, 16 } },
+				{ "ArrowSmall", { 16, 16 } },
+				{ "certina", { 64, 8 } },
+				{ "Ck_base", { 128, 64 } },
+				{ "Ck_00", { 32, 32 } },
+				{ "Ck_01", { 32, 32 } },
+				{ "Ck_02", { 32, 32 } },
+				{ "Ck_03", { 32, 32 } },
+				{ "Ck_04", { 32, 32 } },
+				{ "Ck_05", { 32, 32 } },
+				{ "colin3_2", { 256, 64 } },
+				{ "dialcntr", { 32, 32 } },
+				{ "infobox", { 128, 128 } },
+				{ "MiniStageBanner", { 128, 32 } },
+				{ "osd_glow", { 32, 32 } },
+				{ "rescert", { 128, 32 } },
+				{ "swiss", { 128, 8 } },
+			};
+			auto it = textureDimensions.find(name);
+			if (it != textureDimensions.end())
+			{
+				result->m_width = it->second.first;
+				result->m_height = it->second.second;
+			}
+		}
+		return result;
+	}
+
+	template<std::size_t Ctr, typename Tuple, std::size_t... I, typename Func>
+	void HookEachImpl_Misc_Scaled(Tuple&& tuple, std::index_sequence<I...>, Func&& f)
+	{
+		(f(std::get<I>(tuple), orgCreateTexture_Misc_Scaled<Ctr << 16 | I>, CreateTexture_Misc_Scaled<Ctr << 16 | I>), ...);
+	}
+
+	template<std::size_t Ctr = 0, typename Vars, typename Func>
+	void HookEach_Misc_Scaled(Vars&& vars, Func&& f)
+	{
+		auto tuple = std::tuple_cat(std::forward<Vars>(vars));
+		HookEachImpl_Misc_Scaled<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
+	}
+
+	static D3DTexture* (*orgCreateTexture_Misc_NearestFilter)(void* a1, const char* name, int a3, int a4, int a5);
+	D3DTexture* CreateTexture_Misc_NearestFilter(void* a1, const char* name, int a3, int a4, int a5)
+	{
+		D3DTexture* result = orgCreateTexture_Misc_NearestFilter(a1, name, a3, a4, a5);
+		if (result != nullptr && name != nullptr)
+		{
+			static constexpr std::string_view nearestFilteredTextures[] = {
+				"ct_3"
+			};
+			auto it = std::find(std::begin(nearestFilteredTextures), std::end(nearestFilteredTextures), name);
+			if (it != std::end(nearestFilteredTextures))
+			{
+				Core_Texture_SetFilteringMethod(result, D3DTEXF_POINT, D3DTEXF_POINT, D3DTEXF_POINT);
+			}
+		}
+		return result;
+	}
+
+	static D3DTexture* (*orgCreateTexture_Font)(void* a1, const char* name, int a3, int a4, int a5);
+	D3DTexture* CreateTexture_Font_Scaled(void* a1, const char* name, int a3, int a4, int a5)
+	{
+		D3DTexture* result = orgCreateTexture_Font(a1, name, a3, a4, a5);
+		if (result != nullptr)
+		{
+			bool useNearest = false;
+			if (name != nullptr)
+			{
+				static const std::map<std::string_view, std::pair<uint32_t, bool>, std::less<>> textureDimensions = {
+					{ "kro_11", { 128, false } },
+					{ "kro_20", { 256, true } },
+					{ "O_10pt", { 64, false } },
+					{ "O_12pt", { 64, false } },
+					{ "O_30pt", { 128, false } },
+					{ "Out_30pt", { 128, false } },
+					{ "Dig_18pt", { 128, false } },
+					{ "3d_lcd", { 128, false } },
+					{ "gears", { 128, true } },
+					{ "time", { 64, true } },
+					{ "mph", { 128, false } },
+					{ "speed", { 64, true } },
+					{ "hel_18pt", { 256, false } },
+				};
+				auto it = textureDimensions.find(name);
+				if (it != textureDimensions.end())
+				{
+					// Fonts need to take ratios into consideration, unlike normal textures where we force a fixed size
+					const float heightRatio = result->m_height / static_cast<float>(it->second.first);
+
+					result->m_width = static_cast<uint32_t>(result->m_width / heightRatio);
+					result->m_height = it->second.first;
+					useNearest = it->second.second;
+				}
+			}
+
+			if (useNearest)
+			{
+				Core_Texture_SetFilteringMethod(result, D3DTEXF_POINT, D3DTEXF_POINT, D3DTEXF_POINT);
+			}
+			else
+			{
+				Core_Texture_SetFilteringMethod(result, D3DTEXF_LINEAR, D3DTEXF_LINEAR, D3DTEXF_POINT);
+			}
+		}
+		return result;
+	}
+
+	void Texture_SetFilteringMethod_NOP(D3DTexture*, void*, void*, void*)
+	{
+	}
+}
+
+
 
 void OnInitializeHook()
 {
@@ -825,9 +951,56 @@ void OnInitializeHook()
 
 	auto Protect = ScopedUnprotect::UnprotectSectionOrFullModule( GetModuleHandle( nullptr ), ".text" );
 
+	auto InterceptCall = [](void* addr, auto&& func, auto&& hook)
+	{
+		ReadCall(addr, func);
+		InjectHook(addr, hook);
+	};
+
 	// Globally replace timeGetTime with a QPC-based timer
 	Timers::Setup();
 	Timers::RedirectImports();
+
+
+	// Texture replacements
+	try
+	{
+		using namespace ScaledTexturesSupport;
+
+		std::array<void*, 2> load_texture = {
+			get_pattern("E8 ? ? ? ? 89 06 5E C2 0C 00"),
+			get_pattern("E8 ? ? ? ? 56 89 07"),
+		};
+		auto load_font = pattern("57 E8 ? ? ? ? 8B 0D ? ? ? ? 6A 01").get_one();
+
+		auto load_cube_texture = []
+		{
+			try
+			{
+				// Polish/EFIGS
+				return get_pattern("E8 ? ? ? ? 89 07 5F");
+			}
+			catch (const hook::txn_exception&)
+			{
+				// Czech
+				return get_pattern("E8 ? ? ? ? 89 45 00 5D");
+			}
+		}();
+
+		HookEach_Misc_Scaled(load_texture, InterceptCall);
+
+		ReadCall(load_font.get<void>(1), orgCreateTexture_Font);
+		InjectHook(load_font.get<void>(1), CreateTexture_Font_Scaled);
+
+		// NOP Core::Texture_SetFilteringMethod for fonts as we handle it in the above function now
+		InjectHook(load_font.get<void>(0x1F), Texture_SetFilteringMethod_NOP);
+
+		ReadCall(load_cube_texture, orgCreateTexture_Misc_NearestFilter);
+		InjectHook(load_cube_texture, CreateTexture_Misc_NearestFilter);
+	}
+	TXN_CATCH();
+
+
 	// Added range check for localizations + new strings added in the Polish release
 	try
 	{
@@ -1184,11 +1357,7 @@ void OnInitializeHook()
 					get_pattern("E8 ? ? ? ? 6A 02 6A 01 6A 02"),
 				};
 
-				HookEach(viewports_constant_aspect_ratio, [](void* addr, auto&& func, auto&& hook)
-				{
-					ReadCall(addr, func);
-					InjectHook(addr, hook);
-				});
+				HookEach(viewports_constant_aspect_ratio, InterceptCall);
 			}
 			TXN_CATCH();
 		}

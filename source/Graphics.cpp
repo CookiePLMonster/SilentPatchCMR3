@@ -15,6 +15,16 @@ float GetScaledResolutionWidth()
 	return 480.0f * (static_cast<float>(GetResolutionWidth()) / GetResolutionHeight());
 }
 
+void Core_Texture_SetFilteringMethod(D3DTexture* texture, uint32_t min, uint32_t mag, uint32_t mip)
+{
+	if (texture != nullptr)
+	{
+		texture->m_minFilter = min;
+		texture->m_magFilter = mag;
+		texture->m_mipFilter = mip;
+	}
+}
+
 OSD_Element* OSD_Element_Init_Center(OSD_Element* element, int posX, int posY, int width, int height, int a6, int a7, int a8, int a9, int a10, int a11)
 {
 	const float scaledWidth = GetScaledResolutionWidth();
