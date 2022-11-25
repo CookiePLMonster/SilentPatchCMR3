@@ -14,9 +14,11 @@
 #include <wil/com.h>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstdint>
 #include <map>
+#include <utility>
 #include <vector>
 
 #include <DirectXMath.h>
@@ -787,6 +789,33 @@ namespace SolidRectangleWidthHack
 	}
 }
 
+namespace ConstantViewports
+{
+	template<std::size_t Index>
+	void (*orgViewport_SetDimension)(D3DViewport* viewport, int left, int top, int right, int bottom);
+
+	template<std::size_t Index>
+	static void Viewport_SetDimension(D3DViewport* viewport, int left, int top, int right, int bottom)
+	{
+		orgViewport_SetDimension<Index>(viewport, left, top, right, bottom);
+		Viewport_SetAspectRatio(viewport, 1.0f, 1.0f);
+	}
+
+	template<std::size_t Ctr, typename Tuple, std::size_t... I, typename Func>
+	void HookEachImpl(Tuple&& tuple, std::index_sequence<I...>, Func&& f)
+	{
+		(f(std::get<I>(tuple), orgViewport_SetDimension<Ctr << 16 | I>, Viewport_SetDimension<Ctr << 16 | I>), ...);
+	}
+
+	template<std::size_t Ctr = 0, typename Vars, typename Func>
+	void HookEach(Vars&& vars, Func&& f)
+	{
+		auto tuple = std::tuple_cat(std::forward<Vars>(vars));
+		HookEachImpl<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
+	}
+}
+
+
 void OnInitializeHook()
 {
 	static_assert(std::string_view(__FUNCSIG__).find("__stdcall") != std::string_view::npos, "This codebase must default to __stdcall, please change your compilation settings.");
@@ -1130,10 +1159,10 @@ void OnInitializeHook()
 
 			auto recalc_fov = pattern("D8 0D ? ? ? ? DA 74 24 30 ").get_one();
 
-			D3DViewport_SetAspectRatio = reinterpret_cast<decltype(D3DViewport_SetAspectRatio)>(set_aspect_ratio);
+			Viewport_SetAspectRatio = reinterpret_cast<decltype(Viewport_SetAspectRatio)>(set_aspect_ratio);
 			gViewports = viewports;
 
-			InjectHook(set_viewport, D3DViewport_Set, PATCH_JUMP);
+			InjectHook(set_viewport, Viewport_SetDimensions, PATCH_JUMP);
 			InjectHook(set_aspect_ratios, Graphics_Viewports_SetAspectRatios, PATCH_JUMP);
 
 			// Change the horizontal FOV instead of vertical when refreshing viewports
@@ -1142,6 +1171,26 @@ void OnInitializeHook()
 			Patch(recalc_fov.get<void>(2), &f4By3);
 			Patch<uint8_t>(recalc_fov.get<void>(6+1), 0x7C);
 			Patch<uint8_t>(recalc_fov.get<void>(10+2), 0x1C);
+
+			// Pin viewports into constant aspect ratio
+			try
+			{
+				using namespace ConstantViewports;
+
+				std::array<void*, 3> viewports_constant_aspect_ratio =
+				{
+					get_pattern("E8 ? ? ? ? 8B 0D ? ? ? ? 8D 94 24"),
+					get_pattern("E8 ? ? ? ? 6A 02 6A 01 6A 01"),
+					get_pattern("E8 ? ? ? ? 6A 02 6A 01 6A 02"),
+				};
+
+				HookEach(viewports_constant_aspect_ratio, [](void* addr, auto&& func, auto&& hook)
+				{
+					ReadCall(addr, func);
+					InjectHook(addr, hook);
+				});
+			}
+			TXN_CATCH();
 		}
 		TXN_CATCH();
 
@@ -1165,8 +1214,6 @@ void OnInitializeHook()
 
 			auto initialise = get_pattern("E8 ? ? ? ? 8B 54 24 24 89 5C 24 18");
 			auto reinitialise = get_pattern("E8 ? ? ? ? 8B 15 ? ? ? ? A1 ? ? ? ? 8B 0D");
-
-			auto osd_codriver_get_ar = get_pattern("E8 ? ? ? ? 8B 94 24 ? ? ? ? 8B 84 24 ? ? ? ? 8B 0D");
 
 			auto osd_data = pattern("03 C6 8D 0C 85 ? ? ? ? 8D 04 F5 00 00 00 00").get_one();
 
@@ -1437,8 +1484,6 @@ void OnInitializeHook()
 
 			ReadCall(reinitialise, orgD3D_AfterReinitialise);
 			InjectHook(reinitialise, D3D_AfterReinitialise_RecalculateUI);
-
-			InjectHook(osd_codriver_get_ar, D3DViewport_GetAspectRatioForCoDriver);
 
 			for (void* addr : osd_element_init_center)
 			{

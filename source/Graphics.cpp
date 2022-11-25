@@ -150,46 +150,39 @@ void Graphics_Viewports_SetAspectRatios()
 	const float InvAR = Height / Width;
 	const float TargetAR = 4.0f / 3.0f;
 
-	// TODO: Adjust FOV here
-	auto setAspectRatio = [](D3DViewport* viewport, float hfov, float vfov)
-	{
-		const float FOV = 1.0f;
-		D3DViewport_SetAspectRatio(viewport, hfov * FOV, vfov * FOV);
-	};
-
 	// Main viewport
-	setAspectRatio(gViewports[0], TargetAR * InvAR, TargetAR);
+	Viewport_SetAspectRatio(gViewports[0], TargetAR * InvAR, TargetAR);
 
 	// Horizontal splitscreen - top
-	setAspectRatio(gViewports[1], TargetAR * InvAR, TargetAR * 2.0f);
+	Viewport_SetAspectRatio(gViewports[1], TargetAR * InvAR, TargetAR * 2.0f);
 
 	// Horizontal splitscreen - bottom
 	{
 		const float HeightSplit = Height + 50.0f;
 		const float InvARSplit = HeightSplit / Width;
-		setAspectRatio(gViewports[2], TargetAR * InvARSplit, TargetAR * 2.0f);
+		Viewport_SetAspectRatio(gViewports[2], TargetAR * InvARSplit, TargetAR * 2.0f);
 	}
 
 	// Vertical splitscreen - left
 	{
 		const float WidthSplit = Width - 50.0f;
 		const float InvARSplit = Height / WidthSplit;
-		setAspectRatio(gViewports[3], TargetAR * InvARSplit * 2.0f, TargetAR);
+		Viewport_SetAspectRatio(gViewports[3], TargetAR * InvARSplit * 2.0f, TargetAR);
 	}
 
 	// Vertical splitscreen - right
-	setAspectRatio(gViewports[4], TargetAR * InvAR * 2.0f, TargetAR);
+	Viewport_SetAspectRatio(gViewports[4], TargetAR * InvAR * 2.0f, TargetAR);
 
 	// 4p splitscreen - top left, top right
-	setAspectRatio(gViewports[5], TargetAR * InvAR, TargetAR);
-	setAspectRatio(gViewports[6], TargetAR * InvAR, TargetAR);
+	Viewport_SetAspectRatio(gViewports[5], TargetAR * InvAR, TargetAR);
+	Viewport_SetAspectRatio(gViewports[6], TargetAR * InvAR, TargetAR);
 
 	// 4p splitscreen - bottom left, bottom right
 	{
 		const float HeightSplit = Height + 50.0f;
 		const float InvARSplit = HeightSplit / Width;
-		setAspectRatio(gViewports[7], TargetAR * InvARSplit, TargetAR);
-		setAspectRatio(gViewports[8], TargetAR * InvARSplit, TargetAR);
+		Viewport_SetAspectRatio(gViewports[7], TargetAR * InvARSplit, TargetAR);
+		Viewport_SetAspectRatio(gViewports[8], TargetAR * InvARSplit, TargetAR);
 	}
 }
 
@@ -296,7 +289,7 @@ void D3D_AfterReinitialise_RecalculateUI(void* param)
 	RecalculateUI();
 }
 
-void D3DViewport_Set(D3DViewport* viewport, int left, int top, int right, int bottom)
+void Viewport_SetDimensions(D3DViewport* viewport, int left, int top, int right, int bottom)
 {
 	if (viewport == nullptr)
 	{
@@ -316,11 +309,6 @@ void D3DViewport_Set(D3DViewport* viewport, int left, int top, int right, int bo
 	viewport->m_rightScale = static_cast<float>(right) / ResWidth;
 	viewport->m_bottomScale = static_cast<float>(bottom) / ResHeight;
 	viewport->m_vertFov = 4.0f/3.0f;
-}
-
-void D3DViewport_GetAspectRatioForCoDriver(D3DViewport* /*viewport*/, float* horFov, float* vertFov)
-{
-	*horFov = *vertFov = 1.0f;
 }
 
 static bool bCurrentMoviePillarboxed = false;

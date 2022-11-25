@@ -131,7 +131,7 @@ OSD_Element* OSD_Element_Init_Center(OSD_Element* element, int posX, int posY, i
 OSD_Element* OSD_Element_Init_RightAlign(OSD_Element* element, int posX, int posY, int width, int height, int a6, int a7, int a8, int a9, int a10, int a11);
 OSD_Element* OSD_Element_Init(OSD_Element* element, int posX, int posY, int width, int height, int a6, int a7, int a8, int a9, int a10, int a11);
 
-inline void (*D3DViewport_SetAspectRatio)(D3DViewport* viewport, float hfov, float vfov);
+inline void (*Viewport_SetAspectRatio)(D3DViewport* viewport, float hfov, float vfov);
 inline uint32_t (*GetResolutionWidth)();
 inline uint32_t (*GetResolutionHeight)();
 
@@ -172,9 +172,7 @@ void OSD_Main_SetUpStructsForWidescreen();
 void D3D_Initialise_RecalculateUI(void* param);
 void D3D_AfterReinitialise_RecalculateUI(void* param);
 
-void D3DViewport_Set(D3DViewport* viewport, int left, int top, int right, int bottom);	
-
-void D3DViewport_GetAspectRatioForCoDriver(D3DViewport *viewport, float* horFov, float* vertFov);
+void Viewport_SetDimensions(D3DViewport* viewport, int left, int top, int right, int bottom);
 
 void SetMovieDirectory_SetDimensions(const char* path);
 
