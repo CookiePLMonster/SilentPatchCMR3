@@ -1734,7 +1734,7 @@ void OnInitializeHook()
 
 		auto get_install_string_operator_new = get_pattern("E8 ? ? ? ? 8B 54 24 10 83 C4 04");
 		auto get_install_string = get_pattern("E8 ? ? ? ? 50 E8 ? ? ? ? 68 ? ? ? ? 8B D8 68");
-		auto get_registry_dword = get_pattern("75 6E 8B 4C 24 04", -0x29);
+		auto get_registry_dword = get_pattern("83 EC 08 8B 4C 24 0C 8D 44 24 04");
 		auto set_registry_dword = get_pattern("8D 54 24 0C 6A 04", -0x24);
 		auto set_registry_char = get_pattern("8B 4C 24 04 8D 54 24 0C 6A 01", -0x20);
 
