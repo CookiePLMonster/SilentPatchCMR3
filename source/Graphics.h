@@ -7,6 +7,29 @@
 #include <variant>
 #include <vector>
 
+struct Graphics_Config
+{
+	int m_nameHash;
+	int m_resWidth;
+	int m_resHeight;
+	D3DFORMAT m_format;
+	int m_refreshRate;
+	int m_autoDepthStencil;
+	int m_backBufferCount;
+	int m_multiSampleType;
+	int m_adapter;
+	RECT m_windowRect;
+	int m_windowed;
+	int m_borderless;
+	int field_3C;
+	int field_40;
+	int field_44;
+	int field_48;
+	int field_4C;
+};
+static_assert(sizeof(Graphics_Config) == 0x50, "Wrong size: Graphics_Config");
+
+
 struct D3DViewport
 {
 	int m_handle;
@@ -176,6 +199,8 @@ inline int32_t (*GetNumPlayers)();
 inline D3DViewport** gViewports;
 inline D3DViewport** gDefaultViewport;
 
+inline D3DPRESENT_PARAMETERS* gd3dPP;
+
 float GetScaledResolutionWidth();
 
 void Core_Blitter2D_Rect2D_G_Center(float* data, uint32_t numRectangles);
@@ -196,12 +221,11 @@ void Graphics_Viewports_SetAspectRatios();
 
 void OSD_Main_SetUpStructsForWidescreen();
 
-void D3D_Initialise_RecalculateUI(void* param);
-void D3D_AfterReinitialise_RecalculateUI(void* param);
-
 void Viewport_SetDimensions(D3DViewport* viewport, int left, int top, int right, int bottom);
 
 void SetMovieDirectory_SetDimensions(const char* path);
+
+void RecalculateUI();
 
 namespace Graphics::Patches
 {
@@ -210,6 +234,8 @@ namespace Graphics::Patches
 	inline int32_t* UI_CoutdownPosXVertical[2]; // Special cased, as it's half-center
 
 	inline int32_t* UI_MenuBarTextDrawLimit;
+
+	inline int32_t* UI_TachoInitialised;
 
 	// Movie rendering - special cased, scretch to fill (preserving aspect ratio)
 	inline float* UI_MovieX1;

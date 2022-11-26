@@ -207,7 +207,7 @@ void OSD_Main_SetUpStructsForWidescreen()
 }
 
 static float gAspectRatioMult;
-static void RecalculateUI()
+void RecalculateUI()
 {
 	const int32_t ResWidth = GetResolutionWidth();
 	const int32_t ResHeight = GetResolutionHeight();
@@ -283,20 +283,9 @@ static void RecalculateUI()
 	{
 		orgStartLightData[i].m_posX = centered(Object_StartLightOriginal[i].m_posX);
 	}
-}
 
-void (*orgD3D_Initialise)(void* param);
-void D3D_Initialise_RecalculateUI(void* param)
-{
-	orgD3D_Initialise(param);
-	RecalculateUI();
-}
-
-void (*orgD3D_AfterReinitialise)(void* param);
-void D3D_AfterReinitialise_RecalculateUI(void* param)
-{
-	orgD3D_AfterReinitialise(param);
-	RecalculateUI();
+	// Force the tacho to reinitialise
+	*UI_TachoInitialised = 0;
 }
 
 void Viewport_SetDimensions(D3DViewport* viewport, int left, int top, int right, int bottom)

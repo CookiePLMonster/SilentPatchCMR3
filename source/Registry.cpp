@@ -9,7 +9,6 @@
 #include <wil/win32_helpers.h>
 
 static std::wstring pathToIni = L".\\SilentPatchCMR3.ini";
-static const wchar_t* REGISTRY_SECTION_NAME = L"Registry";
 
 static std::wstring AnsiToWchar(std::string_view text)
 {
@@ -35,27 +34,47 @@ void Registry::Init()
 	}
 }
 
-uint32_t Registry::GetRegistryDword(const char* /*subkey*/, const char* key)
+uint32_t Registry::GetRegistryDword(const wchar_t* section, const wchar_t* key)
 {
-	return GetPrivateProfileIntW(REGISTRY_SECTION_NAME, AnsiToWchar(key).c_str(), 0, pathToIni.c_str());
+	return GetPrivateProfileIntW(section, key, 0, pathToIni.c_str());
 }
 
-char Registry::GetRegistryChar(const char* /*subkey*/, const char* key)
+char Registry::GetRegistryChar(const wchar_t* section, const wchar_t* key)
 {
 	wchar_t buf[16];
-	GetPrivateProfileStringW(REGISTRY_SECTION_NAME, AnsiToWchar(key).c_str(), L"", buf, static_cast<DWORD>(std::size(buf)), pathToIni.c_str());
+	GetPrivateProfileStringW(section, key, L"", buf, static_cast<DWORD>(std::size(buf)), pathToIni.c_str());
 	return static_cast<char>(buf[0]);
 }
 
-void Registry::SetRegistryDword(const char* /*subkey*/, const char* key, uint32_t value)
+void Registry::SetRegistryDword(const wchar_t* section, const wchar_t* key, uint32_t value)
 {
-	WritePrivateProfileStringW(REGISTRY_SECTION_NAME, AnsiToWchar(key).c_str(), std::to_wstring(value).c_str(), pathToIni.c_str());
+	WritePrivateProfileStringW(section, key, std::to_wstring(value).c_str(), pathToIni.c_str());
 }
 
-void Registry::SetRegistryChar(const char* /*subkey*/, const char* key, char value)
+void Registry::SetRegistryChar(const wchar_t* section, const wchar_t* key, char value)
 {
 	const wchar_t buf[2] { static_cast<wchar_t>(value), '\0' };
-	WritePrivateProfileStringW(REGISTRY_SECTION_NAME, AnsiToWchar(key).c_str(), buf, pathToIni.c_str());
+	WritePrivateProfileStringW(section, key, buf, pathToIni.c_str());
+}
+
+uint32_t Registry::Patches::GetRegistryDword_Patch(const char* /*subkey*/, const char* key)
+{
+	return GetRegistryDword(REGISTRY_SECTION_NAME, AnsiToWchar(key).c_str());
+}
+
+char Registry::Patches::GetRegistryChar_Patch(const char* /*subkey*/, const char* key)
+{
+	return GetRegistryChar(REGISTRY_SECTION_NAME, AnsiToWchar(key).c_str());
+}
+
+void Registry::Patches::SetRegistryDword_Patch(const char* /*subkey*/, const char* key, uint32_t value)
+{
+	SetRegistryDword(REGISTRY_SECTION_NAME, AnsiToWchar(key).c_str(), value);
+}
+
+void Registry::Patches::SetRegistryChar_Patch(const char* /*subkey*/, const char* key, char value)
+{
+	SetRegistryChar(REGISTRY_SECTION_NAME, AnsiToWchar(key).c_str(), value);
 }
 
 void* Registry::GetInstallString_Portable(const char* /*subkey*/, const char* /*key*/)

@@ -3,6 +3,17 @@
 #include <cstdint>
 #include <cstddef>
 
+namespace MenuID
+{
+	static constexpr size_t GRAPHICS_ADVANCED = 20; // Original - 20
+}
+
+namespace EntryID
+{
+	static constexpr size_t GRAPHICS_ADV_DRIVER = 0; // Original - 0
+	static constexpr size_t GRAPHICS_ADV_FSAA = 8; // Original - 8
+}
+
 struct MenuDefinition;
 
 struct MenuEntry
@@ -32,8 +43,9 @@ struct MenuDefinition
 	int field_8;
 	int field_C;
 	int m_flags1;
-	unsigned int m_flags2;
-	__int16 m_curEntry;
+	uint32_t m_flags : 10;
+	uint32_t m_numEntries : 8;
+	int16_t m_curEntry;
 	MenuEntry m_entries[40];
 	int field_65C;
 	int64_t field_660;
@@ -51,6 +63,11 @@ struct MenuDefinition
 };
 static_assert(sizeof(MenuDefinition) == 0x6A0, "Wrong size: MenuDefinition");
 
-void Menu_SetUpEntries_Patched(int languagesOnly);
+void FrontEndMenuSystem_SetupMenus_Custom(int languagesOnly);
 
-extern MenuDefinition* gMenus;
+extern MenuDefinition* gmoFrontEndMenus;
+
+namespace Menus::Patches
+{
+	inline bool ExtraAdvancedGraphicsOptionsPatched = false;
+}

@@ -1,22 +1,26 @@
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <Windows.h>
+#include <shellapi.h>
 #include <timeapi.h>
 
 #include "Utils/MemoryMgr.h"
 #include "Utils/Patterns.h"
 
+#include "Destruct.h"
 #include "Graphics.h"
 #include "Menus.h"
 #include "Registry.h"
 
 #include <d3d9.h>
 #include <wil/com.h>
+#include <wil/win32_helpers.h>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
 #include <cstdint>
+#include <filesystem>
 #include <map>
 #include <utility>
 #include <vector>
@@ -68,7 +72,7 @@ namespace Localization
 	uint32_t (*orgGetLanguageIDByCode)(char code);
 	uint32_t GetCurrentLanguageID_Patched()
 	{
-		return orgGetLanguageIDByCode(Registry::GetRegistryChar(nullptr, "LANGUAGE"));
+		return orgGetLanguageIDByCode(Registry::GetRegistryChar(Registry::REGISTRY_SECTION_NAME, L"LANGUAGE"));
 	}
 
 	uint32_t (*orgGetCurrentLanguageID)();
@@ -940,6 +944,255 @@ namespace ScaledTexturesSupport
 	}
 }
 
+namespace NewGraphicsOptions
+{
+	BOOL WINAPI AdjustWindowRectEx_NOP(LPRECT /*lpRect*/, DWORD /*dwStyle*/, BOOL /*bMenu*/, DWORD /*dwExStyle*/)
+	{
+		return TRUE;
+	}
+	static const auto pAdjustWindowRectEx_NOP = &AdjustWindowRectEx_NOP;
+
+	HWND WINAPI FindWindowExA_IgnoreWindowName(HWND hWndParent, HWND hWndChildAfter, LPCSTR lpszClass, LPCSTR /*lpszWindow*/)
+	{
+		return FindWindowExA(hWndParent, hWndChildAfter, lpszClass, nullptr);
+	}
+	static const auto pFindWindowExA_IgnoreWindowName = &FindWindowExA_IgnoreWindowName;
+
+	HINSTANCE* ghInstance;
+	HWND* ghWindow;
+	void Main_WindowDestructor()
+	{
+		DestroyWindow(*ghWindow);
+		*ghWindow = nullptr;
+	}
+
+	bool ResizingViaSetWindowPos = false;
+
+	static LRESULT (CALLBACK *orgWndProc)(HWND, UINT, WPARAM, LPARAM);
+	LRESULT CALLBACK CustomWndProc(HWND hwnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
+	{
+		switch (uMsg)
+		{
+		case WM_SIZING: // Block the message from reaching the game
+		case WM_SETCURSOR:
+		{
+			return DefWindowProcA(hwnd, uMsg, wParam, lParam);
+		}
+		case WM_WINDOWPOSCHANGED: // Prevent SetWindowPos from recursing into our WM_SIZE
+		{
+			if (ResizingViaSetWindowPos)
+			{
+				return 0;
+			}
+			break;
+		}
+		case WM_GETMINMAXINFO:
+		{
+			auto lpMMI = reinterpret_cast<LPMINMAXINFO>(lParam);
+			lpMMI->ptMinTrackSize.x = 640;
+			lpMMI->ptMinTrackSize.y = 480;
+			return 0;
+		}
+		default:
+			break;
+		}
+		return orgWndProc(hwnd, uMsg, wParam, lParam);
+	}
+
+	static void GetDesiredWindowStyle(uint32_t displayMode, DWORD& dwStyle, DWORD& dwExStyle)
+	{
+		dwStyle = WS_VISIBLE;
+		dwExStyle = WS_EX_APPWINDOW;
+		if (displayMode == 1) // Non-borderless windowed only
+		{
+			dwStyle |= WS_OVERLAPPEDWINDOW;
+		}
+		else
+		{
+			dwStyle |= WS_POPUP;
+		}
+	}
+
+	void (*orgGraphics_Initialise)(Graphics_Config* config);
+	void Graphics_Initialise_NewOptions(Graphics_Config* config)
+	{
+		using namespace Registry;
+
+		const uint32_t displayMode = GetRegistryDword(REGISTRY_SECTION_NAME, DISPLAY_MODE_KEY_NAME);
+
+		config->m_windowed = displayMode != 0;
+		config->m_borderless = displayMode == 2;
+
+		orgGraphics_Initialise(config);
+	}
+
+	BOOL CreateClassAndWindow(HINSTANCE hInstance, HWND* outWindow, LPCSTR lpClassName, LRESULT (CALLBACK *wndProc)(HWND, UINT, WPARAM, LPARAM), RECT rect)
+	{
+		ghWindow = outWindow;
+		*ghInstance = hInstance;
+		orgWndProc = wndProc;
+
+		WNDCLASSEXA wndClass { sizeof(wndClass) };
+		wndClass.lpfnWndProc = CustomWndProc;
+		wndClass.hInstance = hInstance;
+		wndClass.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
+		wndClass.lpszClassName = lpClassName;
+		wndClass.style = CS_VREDRAW|CS_HREDRAW;
+		wndClass.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(104));
+		if (wndClass.hIcon == nullptr)
+		{
+			// Extract the icon from Rally_3PC.ico instead
+			wil::unique_cotaskmem_string pathToExe;
+			if (SUCCEEDED(wil::GetModuleFileNameW(hInstance, pathToExe)))
+			{
+				wndClass.hIcon = ExtractIconW(hInstance, std::filesystem::path(pathToExe.get()).replace_filename(L"Rally_3PC.ico").c_str(), 0);
+			}
+		}
+		if (RegisterClassExA(&wndClass) != 0)
+		{
+			using namespace Registry;
+
+			const uint32_t displayMode = GetRegistryDword(REGISTRY_SECTION_NAME, DISPLAY_MODE_KEY_NAME);
+			const char* windowName = "Colin McRae Rally 3";
+
+			DWORD dwStyle = 0;
+			DWORD dwExStyle = 0;
+			GetDesiredWindowStyle(displayMode, dwStyle, dwExStyle);
+			AdjustWindowRectEx(&rect, dwStyle, FALSE, dwExStyle);
+
+			HWND window;
+			if (displayMode == 1) // Non-borderless windowed only
+			{
+				window = CreateWindowExA(dwExStyle, lpClassName, windowName, dwStyle, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, nullptr, nullptr, hInstance, nullptr);
+			}
+			else
+			{
+				const int cxScreen = GetSystemMetrics(SM_CXSCREEN);
+				const int cyScreen = GetSystemMetrics(SM_CYSCREEN);
+				window = CreateWindowExA(dwExStyle, lpClassName, windowName, dwStyle, 0, 0, cxScreen, cyScreen, nullptr, nullptr, hInstance, nullptr);
+			}
+			*outWindow = window;
+			if (window != nullptr)
+			{
+				SetFocus(window);
+				Destruct_AddDestructor(Destruct_GetCoreDestructorGroup(), Main_WindowDestructor);
+				return TRUE;
+			}
+		}
+
+		return FALSE;
+	}
+
+	BOOL WINAPI SetWindowPos_Adjust(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags)
+	{
+		ResizingViaSetWindowPos = true;
+
+		RECT rect { X, Y, X+cx, Y+cy };
+		DWORD dwStyle = 0;
+		DWORD dwExStyle = 0;
+		GetDesiredWindowStyle(1, dwStyle, dwExStyle);
+		AdjustWindowRectEx(&rect, dwStyle, FALSE, dwExStyle);
+
+		BOOL result = SetWindowPos(hWnd, hWndInsertAfter, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, 
+			uFlags|SWP_NOCOPYBITS|SWP_NOREDRAW|SWP_NOSENDCHANGING);
+
+		ResizingViaSetWindowPos = false;
+		return result;
+	}
+	static const auto pSetWindowPos_Adjust = &SetWindowPos_Adjust;
+
+	void ResizeWindow(Graphics_Config* config)
+	{
+		if (config->m_windowed != 0 && config->m_borderless == 0)
+		{
+			RECT& rect = config->m_windowRect;
+			rect.left = (GetSystemMetrics(SM_CXSCREEN) - config->m_resWidth) / 2;
+			rect.right = rect.left + config->m_resWidth;
+			rect.top = (GetSystemMetrics(SM_CYSCREEN) - config->m_resHeight) / 2;
+			rect.bottom = rect.top + config->m_resHeight;
+
+			// Force the game to resize the window
+			gd3dPP->Windowed = static_cast<BOOL>(-1);
+		}
+	}
+
+	template<std::size_t Index>
+	uint32_t (*orgGraphics_Change)(Graphics_Config*);
+
+	template<std::size_t Index>
+	uint32_t Graphics_Change_ResizeWindow(Graphics_Config* config)
+	{
+		ResizeWindow(config);
+		return orgGraphics_Change<Index>(config);
+	}
+
+	template<std::size_t Ctr, typename Tuple, std::size_t... I, typename Func>
+	void HookEachImpl_Graphics_Change(Tuple&& tuple, std::index_sequence<I...>, Func&& f)
+	{
+		(f(std::get<I>(tuple), orgGraphics_Change<Ctr << 16 | I>, Graphics_Change_ResizeWindow<Ctr << 16 | I>), ...);
+	}
+
+	template<std::size_t Ctr = 0, typename Vars, typename Func>
+	void HookEach_Graphics_Change(Vars&& vars, Func&& f)
+	{
+		auto tuple = std::tuple_cat(std::forward<Vars>(vars));
+		HookEachImpl_Graphics_Change<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
+	}
+}
+
+// Those belong in their cpp files, but they're heavily templated so it's easier to drop them here...
+namespace Menus::Patches
+{
+	template<std::size_t Index>
+	void (*orgFrontEndMenuSystem_SetupMenus)(int);
+
+	template<std::size_t Index>
+	void FrontEndMenuSystem_SetupMenus(int languagesOnly)
+	{
+		orgFrontEndMenuSystem_SetupMenus<Index>(languagesOnly);
+		FrontEndMenuSystem_SetupMenus_Custom(languagesOnly);
+	}
+
+	template<std::size_t Ctr, typename Tuple, std::size_t... I, typename Func>
+	void HookEachImpl(Tuple&& tuple, std::index_sequence<I...>, Func&& f)
+	{
+		(f(std::get<I>(tuple), orgFrontEndMenuSystem_SetupMenus<Ctr << 16 | I>, FrontEndMenuSystem_SetupMenus<Ctr << 16 | I>), ...);
+	}
+
+	template<std::size_t Ctr = 0, typename Vars, typename Func>
+	void HookEach(Vars&& vars, Func&& f)
+	{
+		auto tuple = std::tuple_cat(std::forward<Vars>(vars));
+		HookEachImpl<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
+	}
+}
+
+namespace Graphics::Patches
+{
+	// Fake name, as different functions are being patched with the same wrapper
+	template<std::size_t Index>
+	void (*org_Graphics_Config_Func)(Graphics_Config*);
+
+	template<std::size_t Index>
+	void Graphics_Config_Func_RecalculateUI(Graphics_Config* config)
+	{
+		org_Graphics_Config_Func<Index>(config);
+		RecalculateUI();
+	}
+
+	template<std::size_t Ctr, typename Tuple, std::size_t... I, typename Func>
+	void HookEachImpl_RecalculateUI(Tuple&& tuple, std::index_sequence<I...>, Func&& f)
+	{
+		(f(std::get<I>(tuple), org_Graphics_Config_Func<Ctr << 16 | I>, Graphics_Config_Func_RecalculateUI<Ctr << 16 | I>), ...);
+	}
+
+	template<std::size_t Ctr = 0, typename Vars, typename Func>
+	void HookEach_RecalculateUI(Vars&& vars, Func&& f)
+	{
+		auto tuple = std::tuple_cat(std::forward<Vars>(vars));
+		HookEachImpl_RecalculateUI<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
+	}
+}
 
 
 void OnInitializeHook()
@@ -960,6 +1213,29 @@ void OnInitializeHook()
 	// Globally replace timeGetTime with a QPC-based timer
 	Timers::Setup();
 	Timers::RedirectImports();
+
+
+	// Locate globals later patches might rely on
+	bool HasDestruct = false;
+	try
+	{
+		auto get_destructor = pattern("5F 5E B8 ? ? ? ? 5B 83 C4 28").get_one();
+
+		ReadCall(get_destructor.get<void>(-11), Destruct_GetCoreDestructorGroup);
+		ReadCall(get_destructor.get<void>(-5), Destruct_AddDestructor);
+
+		HasDestruct = true;
+	}
+	TXN_CATCH();
+
+	bool HasCored3d = false;
+	try
+	{
+		gd3dPP = *get_pattern<D3DPRESENT_PARAMETERS*>("68 ? ? ? ? 50 FF 52 40", 1);
+
+		HasCored3d = true;
+	}
+	TXN_CATCH();
 
 
 	// Texture replacements
@@ -1104,29 +1380,30 @@ void OnInitializeHook()
 
 
 	// Menu changes
+	bool HasMenuHook = false;
 	try
 	{
-		extern void (*orgMenu_SetUpEntries)(int);
+		using namespace Menus::Patches;
 
 		auto menus = *get_pattern<MenuDefinition*>("C7 05 ? ? ? ? ? ? ? ? 89 3D ? ? ? ? 89 35", 2+4);
-		void* update_menu_entries[] = {
+		std::array<void*, 3> update_menu_entries = {
 			get_pattern("6A 01 E8 ? ? ? ? 5F 5E C2 08 00", 2),
 			get_pattern("E8 ? ? ? ? 6A 00 E8 ? ? ? ? E8 ? ? ? ? C2 08 00", 5 + 2),
 			get_pattern("E8 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? 50 E8 ? ? ? ? 50"),
 		};
 
-		auto set_focus_on_lang_screen = get_pattern("89 0D ? ? ? ? 66 89 35", 6);
+		gmoFrontEndMenus = menus;
+		HookEach(update_menu_entries, InterceptCall);
+		HasMenuHook = true;
 
-		gMenus = menus;
-
-		ReadCall(update_menu_entries[0], orgMenu_SetUpEntries);
-		for (void* addr : update_menu_entries)
+		// This only matches in the Polish executable
+		try
 		{
-			InjectHook(addr, Menu_SetUpEntries_Patched);
+			// Don't override focus every time menus are updated
+			auto set_focus_on_lang_screen = get_pattern("89 0D ? ? ? ? 66 89 35", 6);
+			Nop(set_focus_on_lang_screen, 14);
 		}
-
-		// Don't override focus every time menus are updated
-		Nop(set_focus_on_lang_screen, 14);
+		TXN_CATCH();
 	}
 	TXN_CATCH();
 
@@ -1368,8 +1645,6 @@ void OnInitializeHook()
 		{
 			using namespace Graphics::Patches;
 
-			extern void (*orgD3D_Initialise)(void* param);
-			extern void (*orgD3D_AfterReinitialise)(void* param);
 			extern void (*orgSetMovieDirectory)(const char* path);
 
 			HandyFunction_Draw2DBox = reinterpret_cast<decltype(HandyFunction_Draw2DBox)>(get_pattern("6A 01 E8 ? ? ? ? 6A 05 E8 ? ? ? ? 6A 06 E8 ? ? ? ? DB 44 24 5C", -5));
@@ -1381,8 +1656,10 @@ void OnInitializeHook()
 			Core_Blitter2D_Line2D_G = reinterpret_cast<decltype(Core_Blitter2D_Line2D_G)>(get_pattern("F7 D8 57", -0x14));
 			Core_Blitter2D_Rect2D_GT = reinterpret_cast<decltype(Core_Blitter2D_Rect2D_GT)>(ReadCallFrom(get_pattern("DD D8 E8 ? ? ? ? 8B 7C 24 30", 2)));
 
-			auto initialise = get_pattern("E8 ? ? ? ? 8B 54 24 24 89 5C 24 18");
-			auto reinitialise = get_pattern("E8 ? ? ? ? 8B 15 ? ? ? ? A1 ? ? ? ? 8B 0D");
+			std::array<void*, 2> graphics_change_recalculate_ui = {
+				get_pattern("E8 ? ? ? ? 8B 54 24 24 89 5C 24 18"),
+				get_pattern("E8 ? ? ? ? 8B 15 ? ? ? ? A1 ? ? ? ? 8B 0D"),
+			};
 
 			auto osd_data = pattern("03 C6 8D 0C 85 ? ? ? ? 8D 04 F5 00 00 00 00").get_one();
 
@@ -1435,6 +1712,8 @@ void OnInitializeHook()
 			UI_CoutdownPosXVertical[1] = get_pattern<int32_t>("76 0C B8 ? ? ? ? B9", 2+1);
 
 			UI_MenuBarTextDrawLimit = get_pattern<int32_t>("C7 44 24 2C 01 00 00 00 81 FD", 8+2);
+
+			UI_TachoInitialised = *get_pattern<int32_t*>("89 74 24 24 A1", 4+1);
 
 			patch_field("05 89 01 00 00", 1); // add eax, 393
 			patch_field("81 C5 89 01 00 00", 2); // add ebp, 393
@@ -1648,11 +1927,7 @@ void OnInitializeHook()
 				CMR3Font_SetViewport_JumpBack = set_string_extents.get<void>(-6 + 5);
 			}
 
-			ReadCall(initialise, orgD3D_Initialise);
-			InjectHook(initialise, D3D_Initialise_RecalculateUI);
-
-			ReadCall(reinitialise, orgD3D_AfterReinitialise);
-			InjectHook(reinitialise, D3D_AfterReinitialise_RecalculateUI);
+			HookEach_RecalculateUI(graphics_change_recalculate_ui, InterceptCall);
 
 			for (void* addr : osd_element_init_center)
 			{
@@ -1897,9 +2172,11 @@ void OnInitializeHook()
 
 	// Make the game portable
 	// Removes settings from registry and reliance on INSTALL_PATH
+	bool HasPatches_Registry = false;
 	try
 	{
 		using namespace Registry;
+		using namespace Patches;
 
 		auto get_install_string_operator_new = get_pattern("E8 ? ? ? ? 8B 54 24 10 83 C4 04");
 		auto get_install_string = get_pattern("E8 ? ? ? ? 50 E8 ? ? ? ? 68 ? ? ? ? 8B D8 68");
@@ -1910,19 +2187,62 @@ void OnInitializeHook()
 		ReadCall(get_install_string_operator_new, Patches::orgOperatorNew);
 		InjectHook(get_install_string, GetInstallString_Portable);
 
-		InjectHook(get_registry_dword, GetRegistryDword, PATCH_JUMP);
-		InjectHook(set_registry_dword, SetRegistryDword, PATCH_JUMP);
-		InjectHook(set_registry_char, SetRegistryChar, PATCH_JUMP);
+		InjectHook(get_registry_dword, GetRegistryDword_Patch, PATCH_JUMP);
+		InjectHook(set_registry_dword, SetRegistryDword_Patch, PATCH_JUMP);
+		InjectHook(set_registry_char, SetRegistryChar_Patch, PATCH_JUMP);
 
 		// This one is optional! Polish exe lacks it
 		try
 		{
 			auto get_registry_char = get_pattern("75 5F 8B 4C 24 14", -0x21);
-			InjectHook(get_registry_char, GetRegistryChar, PATCH_JUMP);
+			InjectHook(get_registry_char, GetRegistryChar_Patch, PATCH_JUMP);
 		}
 		TXN_CATCH();
 
 		Registry::Init();
+		HasPatches_Registry = true;
+	}
+	TXN_CATCH();
+
+
+	// Additional Advanced Graphics options
+	// Windowed Mode (TODO MORE)
+	// Requires patches: Registry (for saving/loading), Core D3D (for resizing windows)
+	if (HasPatches_Registry && HasCored3d) try
+	{
+		using namespace NewGraphicsOptions;
+
+		// Try to decouple frontend options from the actual implementations
+		bool HasPatches_Windowed = false;
+		try
+		{
+			auto nop_adjust_windowrect = get_pattern("FF 15 ? ? ? ? 6A 00", 2);
+			auto find_window_ex = get_pattern("FF 15 ? ? ? ? 85 C0 74 0A", 2);
+			auto create_class_and_window = get_pattern("83 EC 28 8B 44 24 38");
+			auto graphics_initialise = get_pattern("E8 ? ? ? ? 8B 54 24 24 89 5C 24 18");
+
+			auto graphics_change_pattern = pattern("85 C0 74 0A 8D 4C 24 54").get_one();
+			std::array<void*, 2> graphics_change = {
+				graphics_change_pattern.get<void>(-5),
+				graphics_change_pattern.get<void>(9),
+			};
+
+			auto set_window_pos_adjust = get_pattern("50 FF 15 ? ? ? ? A1 ? ? ? ? 8B 0D ? ? ? ? 89 44 24 0C", 3);
+
+			ghInstance = *get_pattern<HINSTANCE*>("89 3D ? ? ? ? 89 44 24 14", 2);
+
+			Patch(nop_adjust_windowrect, &pAdjustWindowRectEx_NOP);
+			Patch(find_window_ex, &pFindWindowExA_IgnoreWindowName);
+			InjectHook(create_class_and_window, CreateClassAndWindow, PATCH_JUMP);
+			InterceptCall(graphics_initialise, orgGraphics_Initialise, Graphics_Initialise_NewOptions);
+
+			HookEach_Graphics_Change(graphics_change, InterceptCall);
+
+			Patch(set_window_pos_adjust, &pSetWindowPos_Adjust);
+
+			HasPatches_Windowed = true;
+		}
+		TXN_CATCH();
 	}
 	TXN_CATCH();
 }
