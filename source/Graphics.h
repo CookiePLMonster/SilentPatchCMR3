@@ -29,6 +29,22 @@ struct Graphics_Config
 };
 static_assert(sizeof(Graphics_Config) == 0x50, "Wrong size: Graphics_Config");
 
+struct MenuResolutionEntry
+{
+	char m_displayText[64];
+	int m_width;
+	int m_height;
+	int m_refreshRate;
+	D3DFORMAT m_format;
+	D3DFORMAT m_backBufferFormat;
+	D3DFORMAT field_54;
+	int field_58;
+	int field_5C;
+	int field_60;
+	int field_64;
+};
+static_assert(sizeof(MenuResolutionEntry) == 104, "Wrong size: MenuResolutionEntry");
+
 
 struct D3DViewport
 {
@@ -190,11 +206,27 @@ inline void (*Core_Blitter2D_Rect2D_GT)(float* data, uint32_t numRectangles);
 inline void (*Core_Blitter2D_Line2D_G)(float* data, uint32_t numLines);
 
 inline void (*HandyFunction_Draw2DBox)(int posX, int posY, int width, int height, int color);
-inline void (*CMR3Font_BlitText)(uint8_t a1, const char* text, int posX, int posY, int a5, char a6);
+inline void (*CMR3Font_BlitText)(uint8_t fontID, const char* text, int posX, int posY, int a5, char a6);
+inline int (*CMR3Font_GetTextWidth)(uint8_t fontID, const char* text);
 
 inline void (*Keyboard_DrawTextEntryBox)(int posX, int posY, int a3, int a4, uint32_t a5, int a6);
 
+inline void (*Graphics_SetGammaRamp)(int flag, float gamma);
+inline uint32_t (*Graphics_GetNumAdapters)();
+inline void (*Graphics_CheckForVertexShaders)(int, int, int);
+
+inline int32_t (*CMR_GetAdapterProductID)(int32_t, int32_t);
+inline int32_t (*CMR_GetAdapterVendorID)(int32_t, int32_t);
+inline int32_t (*CMR_GetValidModeIndex)(int32_t, int32_t, int32_t, int32_t);
+inline int32_t (*CMR_ValidateModeFormats)(int32_t adapter);
+inline void (*CMR_SetupRender)();
+
+inline const MenuResolutionEntry* (*GetMenuResolutionEntry)(int32_t, int32_t);
+
 inline int32_t (*GetNumPlayers)();
+
+inline Graphics_Config* gGraphicsConfig;
+const Graphics_Config& Graphics_GetCurrentConfig();
 
 inline D3DViewport** gViewports;
 inline D3DViewport** gDefaultViewport;

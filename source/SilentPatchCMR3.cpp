@@ -8,7 +8,9 @@
 #include "Utils/Patterns.h"
 
 #include "Destruct.h"
+#include "Globals.h"
 #include "Graphics.h"
+#include "Language.h"
 #include "Menus.h"
 #include "Registry.h"
 
@@ -29,46 +31,11 @@
 
 #pragma comment(lib, "winmm.lib")
 
+static int DesktopWidth, DesktopHeight;
+static HICON SmallIcon;
+
 namespace Localization
 {
-	struct LangFile
-	{
-		char m_magic[4]; // LANG
-		uint32_t m_version;
-		uint32_t m_numFiles;
-		const char* m_texts[1]; // VLA
-	};
-	static LangFile** gActiveLanguage;
-	const char* GetLocalizedString_BoundsCheck(uint32_t ID)
-	{
-		// Original code with bounds check added
-		const LangFile* language = *gActiveLanguage;
-		if (ID < language->m_numFiles)
-		{
-			return language->m_texts[ID];
-		}
-
-		// All strings that were hardcoded in the English release, but translated in the Polish release
-		static const std::map<uint32_t, const char*> newLocalizedStrings = {
-			{ 994, "NA" },
-			{ 1004, "Return" }, { 1005, "Esc" }, { 1006, "BackSpc" }, { 1007, "TAB" },
-			{ 1008, "F1" }, { 1009, "F2" }, { 1010, "F3" }, { 1011, "F4" },
-			{ 1012, "F5" }, { 1013, "F6" }, { 1014, "F7" }, { 1015, "F8" },
-			{ 1016, "F9" }, { 1017, "F10" }, { 1018, "F11" }, { 1019, "F12" },
-			{ 1020, "PrintScrn" }, { 1021, "ScrollLock" }, { 1022, "Pause" }, { 1023, "Insert" },
-			{ 1024, "Home" }, { 1025, "PgUp" }, { 1026, "Del" }, { 1027, "End" },
-			{ 1028, "PgDn" }, { 1029, "Right" }, { 1030, "Left" }, { 1031, "Up" },
-			{ 1032, "Down" }, { 1033, "[?]" },
-		};
-		auto it = newLocalizedStrings.find(ID);
-		if (it != newLocalizedStrings.end())
-		{
-			return it->second;
-		}
-
-		return "";
-	}
-
 	uint32_t (*orgGetLanguageIDByCode)(char code);
 	uint32_t GetCurrentLanguageID_Patched()
 	{
@@ -408,22 +375,6 @@ namespace Timers
 
 namespace ResolutionsList
 {
-	struct MenuResolutionEntry
-	{
-		char m_displayText[64];
-		int m_width;
-		int m_height;
-		int m_refreshRate;
-		D3DFORMAT m_format;
-		D3DFORMAT m_backBufferFormat;
-		D3DFORMAT field_54;
-		int field_58;
-		int field_5C;
-		int field_60;
-		int field_64;
-	};
-	static_assert(sizeof(MenuResolutionEntry) == 104, "Wrong size: MenuResolutionEntry");
-
 	// Easiest to do this via runtime patching...
 	std::vector<std::pair<void*, size_t>> placesToPatch;
 
@@ -1038,14 +989,14 @@ namespace NewGraphicsOptions
 		wndClass.hbrBackground = static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH));
 		wndClass.lpszClassName = lpClassName;
 		wndClass.style = CS_VREDRAW|CS_HREDRAW;
-		wndClass.hIcon = LoadIcon(hInstance, MAKEINTRESOURCE(104));
+		wndClass.hIcon = SmallIcon = LoadIcon(hInstance, MAKEINTRESOURCE(104));
 		if (wndClass.hIcon == nullptr)
 		{
 			// Extract the icon from Rally_3PC.ico instead
 			wil::unique_cotaskmem_string pathToExe;
 			if (SUCCEEDED(wil::GetModuleFileNameW(hInstance, pathToExe)))
 			{
-				wndClass.hIcon = ExtractIconW(hInstance, std::filesystem::path(pathToExe.get()).replace_filename(L"Rally_3PC.ico").c_str(), 0);
+				wndClass.hIcon = SmallIcon = ExtractIconW(hInstance, std::filesystem::path(pathToExe.get()).replace_filename(L"Rally_3PC.ico").c_str(), 0);
 			}
 		}
 		if (RegisterClassExA(&wndClass) != 0)
@@ -1067,8 +1018,8 @@ namespace NewGraphicsOptions
 			}
 			else
 			{
-				const int cxScreen = GetSystemMetrics(SM_CXSCREEN);
-				const int cyScreen = GetSystemMetrics(SM_CYSCREEN);
+				const int cxScreen = DesktopWidth;
+				const int cyScreen = DesktopHeight;
 				window = CreateWindowExA(dwExStyle, lpClassName, windowName, dwStyle, 0, 0, cxScreen, cyScreen, nullptr, nullptr, hInstance, nullptr);
 			}
 			*outWindow = window;
@@ -1083,18 +1034,33 @@ namespace NewGraphicsOptions
 		return FALSE;
 	}
 
+	LONG WINAPI SetWindowLongA_NOP(HWND /*hWnd*/, int /*nIndex*/, LONG /*dwNewLong*/)
+	{
+		return 0;
+	}
+	static const auto pSetWindowLongA_NOP = &SetWindowLongA_NOP;
+
 	BOOL WINAPI SetWindowPos_Adjust(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags)
 	{
 		ResizingViaSetWindowPos = true;
 
+		const Graphics_Config& config = Graphics_GetCurrentConfig();
+
+		uint32_t displayMode = 0;
+		if (config.m_windowed != 0 && config.m_borderless == 0) displayMode = 1;
+		else if (config.m_windowed != 0 && config.m_borderless != 0) displayMode = 2;
+
 		RECT rect { X, Y, X+cx, Y+cy };
 		DWORD dwStyle = 0;
 		DWORD dwExStyle = 0;
-		GetDesiredWindowStyle(1, dwStyle, dwExStyle);
+		GetDesiredWindowStyle(displayMode, dwStyle, dwExStyle);
 		AdjustWindowRectEx(&rect, dwStyle, FALSE, dwExStyle);
 
+		SetWindowLongPtr(hWnd, GWL_STYLE, dwStyle);
 		BOOL result = SetWindowPos(hWnd, hWndInsertAfter, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, 
-			uFlags|SWP_NOCOPYBITS|SWP_NOREDRAW|SWP_NOSENDCHANGING);
+			uFlags|SWP_FRAMECHANGED);
+
+		SendMessage(hWnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(SmallIcon));
 
 		ResizingViaSetWindowPos = false;
 		return result;
@@ -1103,17 +1069,31 @@ namespace NewGraphicsOptions
 
 	void ResizeWindow(Graphics_Config* config)
 	{
-		if (config->m_windowed != 0 && config->m_borderless == 0)
+		if (config->m_windowed != 0)
 		{
 			RECT& rect = config->m_windowRect;
-			rect.left = (GetSystemMetrics(SM_CXSCREEN) - config->m_resWidth) / 2;
-			rect.right = rect.left + config->m_resWidth;
-			rect.top = (GetSystemMetrics(SM_CYSCREEN) - config->m_resHeight) / 2;
-			rect.bottom = rect.top + config->m_resHeight;
+			if (config->m_borderless == 0)
+			{		
+				rect.left = (DesktopWidth - config->m_resWidth) / 2;
+				rect.right = rect.left + config->m_resWidth;
+				rect.top = (DesktopHeight - config->m_resHeight) / 2;
+				rect.bottom = rect.top + config->m_resHeight;
+			}
+			else
+			{
+				// When resizing to borderless, span the entire desktop
+				rect.left = 0;
+				rect.right = DesktopWidth;
+				rect.top = 0;
+				rect.bottom = DesktopHeight;
+			}
 
 			// Force the game to resize the window
 			gd3dPP->Windowed = static_cast<BOOL>(-1);
 		}
+
+		// Those are "missing" from the Change call
+		gGraphicsConfig->m_borderless = config->m_borderless;
 	}
 
 	template<std::size_t Index>
@@ -1137,6 +1117,29 @@ namespace NewGraphicsOptions
 	{
 		auto tuple = std::tuple_cat(std::forward<Vars>(vars));
 		HookEachImpl_Graphics_Change<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
+	}
+
+	static void* PC_GraphicsAdvanced_Display_NewOptionsJumpBack;
+	__declspec(naked) void PC_GraphicsAdvanced_Display_CaseNewOptions()
+	{
+		__asm
+		{
+			push	eax // entryID
+			push	ebp // posY
+			push	dword ptr [esp+330h+8] // interp
+			push	dword ptr [esp+334h+4] // menu
+			call	PC_GraphicsAdvanced_Display_NewOptions
+			jmp		[PC_GraphicsAdvanced_Display_NewOptionsJumpBack]
+		}
+	}
+
+	uint32_t (*orgGraphics_SetupRenderFromMenuOptions)(Graphics_Config*);
+	uint32_t Graphics_Change_SetupRenderFromMenuOptions(Graphics_Config* config)
+	{
+		const uint32_t displayMode = gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_entries[EntryID::GRAPHICS_ADV_DISPLAYMODE].m_value;
+		config->m_windowed = displayMode != 0;
+		config->m_borderless = displayMode == 2;
+		return orgGraphics_SetupRenderFromMenuOptions(config);
 	}
 }
 
@@ -1202,6 +1205,10 @@ void OnInitializeHook()
 	using namespace Memory;
 	using namespace hook::txn;
 
+	// TODO: Check this against HiDPI
+	DesktopWidth = GetSystemMetrics(SM_CXSCREEN);
+	DesktopHeight = GetSystemMetrics(SM_CYSCREEN);
+
 	auto Protect = ScopedUnprotect::UnprotectSectionOrFullModule( GetModuleHandle( nullptr ), ".text" );
 
 	auto InterceptCall = [](void* addr, auto&& func, auto&& hook)
@@ -1216,6 +1223,15 @@ void OnInitializeHook()
 
 
 	// Locate globals later patches might rely on
+	bool HasGlobals = false;
+	try
+	{
+		gszTempString = *get_pattern<char*>("68 ? ? ? ? E8 ? ? ? ? 8B 46 4C", 1);
+
+		HasGlobals = true;
+	}
+	TXN_CATCH();
+
 	bool HasDestruct = false;
 	try
 	{
@@ -1237,6 +1253,75 @@ void OnInitializeHook()
 	}
 	TXN_CATCH();
 
+	bool HasCMR3FE = false;
+	try
+	{
+		auto funcs_save = pattern("E8 ? ? ? ? 8A 15 ? ? ? ? 52 E8 ? ? ? ? A1 ? ? ? ? 50").get_one();
+		auto funcs_load = pattern("E8 ? ? ? ? 25 ? ? ? ? A3 ? ? ? ? E8 ? ? ? ? A3 ? ? ? ? E8 ? ? ? ? DB 05 ? ? ? ? 51 A3").get_one();
+
+		CMR_FE_GetTextureQuality = reinterpret_cast<decltype(CMR_FE_GetTextureQuality)>(ReadCallFrom(funcs_load.get<void>(0)));
+		CMR_FE_GetEnvironmentMap = reinterpret_cast<decltype(CMR_FE_GetEnvironmentMap)>(ReadCallFrom(funcs_load.get<void>(15)));
+		CMR_FE_GetDrawShadow = reinterpret_cast<decltype(CMR_FE_GetDrawShadow)>(ReadCallFrom(funcs_load.get<void>(25)));
+		CMR_FE_GetGraphicsQuality = reinterpret_cast<decltype(CMR_FE_GetGraphicsQuality)>(ReadCallFrom(get_pattern("E8 ? ? ? ? 25 ? ? ? ? 33 C9")));
+		CMR_FE_GetDrawDistance = reinterpret_cast<decltype(CMR_FE_GetDrawDistance)>(ReadCallFrom(get_pattern("E8 ? ? ? ? 89 44 24 24 DB 44 24 24")));
+
+		CMR_FE_SetGraphicsQuality = reinterpret_cast<decltype(CMR_FE_SetTextureQuality)>(ReadCallFrom(funcs_save.get<void>(0)));
+		CMR_FE_SetTextureQuality = reinterpret_cast<decltype(CMR_FE_SetTextureQuality)>(ReadCallFrom(funcs_save.get<void>(5+6+1)));
+		CMR_FE_SetEnvironmentMap = reinterpret_cast<decltype(CMR_FE_SetEnvironmentMap)>(ReadCallFrom(funcs_save.get<void>(0x17)));
+		CMR_FE_SetDrawShadow = reinterpret_cast<decltype(CMR_FE_SetDrawShadow)>(ReadCallFrom(funcs_save.get<void>(0x23)));
+		CMR_FE_SetDrawDistance = reinterpret_cast<decltype(CMR_FE_SetDrawDistance)>(ReadCallFrom(funcs_save.get<void>(0x4C)));
+		CMR_FE_SetFSAA = reinterpret_cast<decltype(CMR_FE_SetFSAA)>(ReadCallFrom(funcs_save.get<void>(0x2F)));
+
+		CMR_FE_StoreRegistry = reinterpret_cast<decltype(CMR_FE_StoreRegistry)>(ReadCallFrom(funcs_save.get<void>(-0xB)));
+
+		SetUseLowQualityTextures = reinterpret_cast<decltype(SetUseLowQualityTextures)>(ReadCallFrom(get_pattern("E8 ? ? ? ? 8D 94 24 ? ? ? ? C7 05")));
+
+		DrawLeftRightArrows = reinterpret_cast<decltype(DrawLeftRightArrows)>(get_pattern("81 EC ? ? ? ? 0F BF 41 18", -8));
+
+		HasCMR3FE = true;
+	}
+	TXN_CATCH();
+
+	bool HasCMR3Font = false;
+	try
+	{
+		CMR3Font_BlitText = reinterpret_cast<decltype(CMR3Font_BlitText)>(get_pattern("8B 74 24 30 8B 0D", -6));
+		CMR3Font_GetTextWidth = reinterpret_cast<decltype(CMR3Font_GetTextWidth)>(get_pattern("83 EC 20 8B 44 24 24"));
+
+		HasCMR3Font = true;
+	}
+	TXN_CATCH();
+
+	bool HasGraphics = false;
+	try
+	{
+		auto set_gamma_ramp = get_pattern("D9 44 24 08 81 EC");
+		auto get_num_adapters = ReadCallFrom(get_pattern("E8 ? ? ? ? 8B F8 32 DB"));
+		auto get_current_config = reinterpret_cast<uintptr_t>(ReadCallFrom(get_pattern("E8 ? ? ? ? 51 8B 7C 24 68")));
+		auto check_for_vertex_shaders = get_pattern("81 EC ? ? ? ? 8D 8C 24", -4);
+		auto setup_render = get_pattern("81 EC ? ? ? ? 56 8D 44 24 08");
+
+		auto save_func = pattern("E8 ? ? ? ? 8B 0D ? ? ? ? 6A FF 51 8B F8 E8").get_one();
+		auto get_modes = pattern("E8 ? ? ? ? 33 F6 85 C0 89 44 24 14").get_one();
+
+		Graphics_SetGammaRamp = reinterpret_cast<decltype(Graphics_SetGammaRamp)>(set_gamma_ramp);
+		Graphics_GetNumAdapters = reinterpret_cast<decltype(Graphics_GetNumAdapters)>(get_num_adapters);
+		Graphics_CheckForVertexShaders = reinterpret_cast<decltype(Graphics_CheckForVertexShaders)>(check_for_vertex_shaders);
+
+		CMR_GetAdapterProductID = reinterpret_cast<decltype(CMR_GetAdapterProductID)>(ReadCallFrom(save_func.get<void>(0)));
+		CMR_GetAdapterVendorID = reinterpret_cast<decltype(CMR_GetAdapterVendorID)>(ReadCallFrom(save_func.get<void>(0x10)));
+		GetMenuResolutionEntry = reinterpret_cast<decltype(GetMenuResolutionEntry)>(ReadCallFrom(save_func.get<void>(0x26)));
+
+		CMR_GetValidModeIndex = reinterpret_cast<decltype(CMR_GetValidModeIndex)>(get_modes.get<void>(-9));
+		CMR_ValidateModeFormats = reinterpret_cast<decltype(CMR_ValidateModeFormats)>(ReadCallFrom(get_modes.get<void>(0)));
+
+		CMR_SetupRender = reinterpret_cast<decltype(CMR_SetupRender)>(setup_render);
+
+		gGraphicsConfig = *reinterpret_cast<Graphics_Config**>(get_current_config + 0xC);
+
+		HasGraphics = true;
+	}
+	TXN_CATCH();
 
 	// Texture replacements
 	try
@@ -1278,15 +1363,17 @@ void OnInitializeHook()
 
 
 	// Added range check for localizations + new strings added in the Polish release
+	bool HasLanguageHook = false;
 	try
 	{
 		using namespace Localization;
 
 		auto get_localized_string = ReadCallFrom(get_pattern("E8 ? ? ? ? 8D 56 E2"));
 
-		gActiveLanguage = *get_pattern<LangFile**>("89 0D ? ? ? ? B8 ? ? ? ? 5E", 2);
-		InjectHook(get_localized_string, GetLocalizedString_BoundsCheck, PATCH_JUMP);
+		gpCurrentLanguage = *get_pattern<LangFile**>("89 0D ? ? ? ? B8 ? ? ? ? 5E", 2);
+		InjectHook(get_localized_string, Language_GetString, PATCH_JUMP);
 
+		HasLanguageHook = true;
 	}
 	TXN_CATCH();
 
@@ -1641,14 +1728,13 @@ void OnInitializeHook()
 		TXN_CATCH();
 
 		// UI
-		try
+		if (HasCMR3Font) try
 		{
 			using namespace Graphics::Patches;
 
 			extern void (*orgSetMovieDirectory)(const char* path);
 
 			HandyFunction_Draw2DBox = reinterpret_cast<decltype(HandyFunction_Draw2DBox)>(get_pattern("6A 01 E8 ? ? ? ? 6A 05 E8 ? ? ? ? 6A 06 E8 ? ? ? ? DB 44 24 5C", -5));
-			CMR3Font_BlitText = reinterpret_cast<decltype(CMR3Font_BlitText)>(get_pattern("8B 74 24 30 8B 0D", -6));
 
 			Keyboard_DrawTextEntryBox = reinterpret_cast<decltype(Keyboard_DrawTextEntryBox)>(get_pattern("56 3B C3 57 0F 84 ? ? ? ? DB 84 24", -0xD));
 
@@ -2208,9 +2294,12 @@ void OnInitializeHook()
 	// Additional Advanced Graphics options
 	// Windowed Mode (TODO MORE)
 	// Requires patches: Registry (for saving/loading), Core D3D (for resizing windows)
-	if (HasPatches_Registry && HasCored3d) try
+	if (HasPatches_Registry && HasCored3d && HasDestruct) try
 	{
 		using namespace NewGraphicsOptions;
+
+		// Both inner scopes patch this independently
+		auto graphics_change_pattern = pattern("85 C0 74 0A 8D 4C 24 54").get_one();
 
 		// Try to decouple frontend options from the actual implementations
 		bool HasPatches_Windowed = false;
@@ -2221,13 +2310,12 @@ void OnInitializeHook()
 			auto create_class_and_window = get_pattern("83 EC 28 8B 44 24 38");
 			auto graphics_initialise = get_pattern("E8 ? ? ? ? 8B 54 24 24 89 5C 24 18");
 
-			auto graphics_change_pattern = pattern("85 C0 74 0A 8D 4C 24 54").get_one();
 			std::array<void*, 2> graphics_change = {
 				graphics_change_pattern.get<void>(-5),
 				graphics_change_pattern.get<void>(9),
 			};
 
-			auto set_window_pos_adjust = get_pattern("50 FF 15 ? ? ? ? A1 ? ? ? ? 8B 0D ? ? ? ? 89 44 24 0C", 3);
+			auto set_window_pos_adjust = pattern("50 FF 15 ? ? ? ? A1 ? ? ? ? 8B 0D ? ? ? ? 89 44 24 0C").get_one();
 
 			ghInstance = *get_pattern<HINSTANCE*>("89 3D ? ? ? ? 89 44 24 14", 2);
 
@@ -2238,9 +2326,134 @@ void OnInitializeHook()
 
 			HookEach_Graphics_Change(graphics_change, InterceptCall);
 
-			Patch(set_window_pos_adjust, &pSetWindowPos_Adjust);
+			Patch(set_window_pos_adjust.get<void>(-0x22 + 2), &pSetWindowLongA_NOP);
+			Patch(set_window_pos_adjust.get<void>(1 + 2), &pSetWindowPos_Adjust);
 
 			HasPatches_Windowed = true;
+		}
+		TXN_CATCH();
+
+
+		// Only make frontend changes if all functionality has been successfully patched in
+		if (HasGlobals && HasGraphics && HasCMR3FE && HasCMR3Font && HasMenuHook && HasLanguageHook && HasPatches_Windowed) try
+		{
+			auto graphics_advanced_enter = pattern("8B 46 24 A3 ? ? ? ? 8B 4E 4C").get_one();
+			auto graphics_advanced_select = get_pattern("50 E8 ? ? ? ? 8B 0D ? ? ? ? 8B 74 24 58", -0xD);
+
+			auto advanced_graphics_load_settings = get_pattern("83 EC 58 53 55 56 57 6A 00 68");
+			auto advanced_graphics_save_settings = get_pattern("83 EC 2C A1 ? ? ? ? 53 56 57 6A FF 50");
+
+			auto set_graphics_from_preset = get_pattern("25 ? ? ? ? 33 C9 2B C1", -6);
+
+			auto advanced_graphics_display_jump_table = pattern("8B DF 83 F8 ? 0F 87").get_one();
+
+			auto advanced_graphics_texture_quality_display_value = get_pattern("8B 86 ? ? ? ? 81 C7 ? ? ? ? 83 E8 00 74 0A", 2);
+			auto advanced_graphics_envmap_display = pattern("8A 86 ? ? ? ? 8B 8C 24").get_one();
+			auto advanced_graphics_shadows_display = pattern("8A 8E ? ? ? ? 8B 94 24").get_one();
+			auto advanced_graphics_draw_distance_display = pattern("8B 8E ? ? ? ? 8B F8 81 C7").get_one();
+			auto advanced_graphics_gamma_display = pattern("8B 86 ? ? ? ? 81 C7 ? ? ? ? 40").get_one();
+			auto advanced_graphics_fsaa_display_value = get_pattern("8B 96 ? ? ? ? 8B 40 4C", 2);
+
+			auto advanced_graphics_texture_quality_display_arrow = get_pattern("52 6A 03 56", 2);
+			auto advanced_graphics_draw_distance_display_arrow = get_pattern("50 6A 06 56", 2);
+			auto advanced_graphics_gamma_display_arrow = get_pattern("52 6A 07 56", 2);
+			auto advanced_graphics_fsaa_display_arrow = get_pattern("52 6A 08 56", 2);
+
+			PC_GraphicsAdvanced_Display_NewOptionsJumpBack = get_pattern("8B 44 24 1C 8B 4C 24 18 25 ? ? ? ? 6A 09");
+
+			void* fsaa_globals_value[] = {
+				get_pattern("A1 ? ? ? ? 89 7C 24 20", 1),
+			};
+
+			void* gamma_locals_value[] = {
+				get_pattern("51 8B 7C 24 68 DB 87", 1 + 4 + 2),
+			};
+
+			auto fsaa_on_adapter_change = pattern("8B 83 ? ? ? ? 7F 0A").get_one();
+			auto gamma_on_adapter_change = pattern("C7 83 ? ? ? ? ? ? ? ? EB 1B").get_one();
+			auto envmap_on_adapter_change1 = get_pattern("89 15 ? ? ? ? 8D 84 24", -6 + 2);
+			auto envmap_on_adapter_change2 = pattern("8B 83 ? ? ? ? 75 22").get_one();
+			auto shadows_on_adapter_change = pattern("89 15 ? ? ? ? 85 84 24").get_one();
+
+			InjectHook(advanced_graphics_load_settings, PC_GraphicsAdvanced_LoadSettings, PATCH_JUMP);
+			InjectHook(advanced_graphics_save_settings, PC_GraphicsAdvanced_SaveSettings, PATCH_JUMP);
+
+			InjectHook(set_graphics_from_preset, PC_GraphicsAdvanced_SetGraphicsFromPresetQuality, PATCH_JUMP);
+
+			Patch<int32_t>(graphics_advanced_enter.get<void>(0x22 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_value));
+
+			InjectHook(graphics_advanced_enter.get<void>(0x3B), PC_GraphicsAdvanced_Enter_NewOptions, PATCH_JUMP);
+			InjectHook(graphics_advanced_select, PC_GraphicsAdvanced_Select_NewOptions, PATCH_JUMP);
+
+			for (void* addr : fsaa_globals_value)
+			{
+				Patch(addr, &gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_entries[EntryID::GRAPHICS_ADV_FSAA].m_value);
+			}
+
+			for (void* addr : gamma_locals_value)
+			{
+				Patch<int32_t>(addr, offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_value));
+			}
+
+			Patch<int32_t>(fsaa_on_adapter_change.get<void>(-6 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_FSAA].m_entryDataInt));
+			Patch<int32_t>(fsaa_on_adapter_change.get<void>(0 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_FSAA].m_visibilityAndName));
+			Patch<int32_t>(fsaa_on_adapter_change.get<void>(8 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_FSAA].m_value));
+			Patch<int32_t>(fsaa_on_adapter_change.get<void>(0x17 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_FSAA].m_visibilityAndName));
+			
+			Patch<int32_t>(gamma_on_adapter_change.get<void>(0 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_entryDataInt));
+			Patch<int32_t>(gamma_on_adapter_change.get<void>(0xC + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_visibilityAndName));
+			Patch<int32_t>(gamma_on_adapter_change.get<void>(0x12 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_value));
+			Patch<int32_t>(gamma_on_adapter_change.get<void>(0x21 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_visibilityAndName));
+
+			Patch<int32_t>(envmap_on_adapter_change1, offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_value));
+			Patch<int32_t>(envmap_on_adapter_change2.get<void>(0 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_visibilityAndName));
+			Patch<int32_t>(envmap_on_adapter_change2.get<void>(0xF + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_value));
+			Patch<int32_t>(envmap_on_adapter_change2.get<void>(0x19 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_visibilityAndName));
+			Patch<int32_t>(envmap_on_adapter_change2.get<void>(0x37 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_value));
+			Patch<int32_t>(envmap_on_adapter_change2.get<void>(0x37 + 6 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_visibilityAndName));
+
+			Patch<int32_t>(shadows_on_adapter_change.get<void>(-6 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_value));
+			Patch<int32_t>(shadows_on_adapter_change.get<void>(0xF + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_visibilityAndName));
+			Patch<int32_t>(shadows_on_adapter_change.get<void>(0xF + 6 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_value));
+			Patch<int32_t>(shadows_on_adapter_change.get<void>(0x2B + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_value));
+			Patch<int32_t>(shadows_on_adapter_change.get<void>(0x31 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_visibilityAndName));
+			Patch<int32_t>(shadows_on_adapter_change.get<void>(0x41 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_visibilityAndName));
+
+			// Build and inject a new jump table
+			Patch<uint8_t>(advanced_graphics_display_jump_table.get<void>(2 + 2), EntryID::GRAPHICS_ADV_NUM - 1);
+
+			void** orgJumpTable = *advanced_graphics_display_jump_table.get<void**>(0xB + 3);
+			static const void* advanced_graphics_display_new_jump_table[EntryID::GRAPHICS_ADV_NUM] = {
+				orgJumpTable[0], orgJumpTable[1], orgJumpTable[2],
+				&PC_GraphicsAdvanced_Display_CaseNewOptions,
+				orgJumpTable[3], orgJumpTable[4], orgJumpTable[5], orgJumpTable[6], orgJumpTable[7], orgJumpTable[8],
+				orgJumpTable[9], orgJumpTable[10]
+			};
+			Patch(advanced_graphics_display_jump_table.get<void**>(0xB + 3), &advanced_graphics_display_new_jump_table);
+
+			Patch<int32_t>(advanced_graphics_texture_quality_display_value, offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_TEXTUREQUALITY].m_value));
+			Patch<int8_t>(advanced_graphics_texture_quality_display_arrow, EntryID::GRAPHICS_ADV_TEXTUREQUALITY);
+
+			Patch<int32_t>(advanced_graphics_envmap_display.get<void>(2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_visibilityAndName) + 3);
+			Patch<int32_t>(advanced_graphics_envmap_display.get<void>(6 + 7 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_value));
+
+			Patch<int32_t>(advanced_graphics_shadows_display.get<void>(2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_visibilityAndName) + 3);
+			Patch<int32_t>(advanced_graphics_shadows_display.get<void>(6 + 7 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_value));
+
+			Patch<int32_t>(advanced_graphics_draw_distance_display.get<void>(2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_DRAWDISTANCE].m_value));
+			Patch<int32_t>(advanced_graphics_draw_distance_display.get<void>(0x24 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_DRAWDISTANCE].m_value));
+			Patch<int8_t>(advanced_graphics_draw_distance_display_arrow, EntryID::GRAPHICS_ADV_DRAWDISTANCE);
+
+			Patch<int32_t>(advanced_graphics_gamma_display.get<void>(2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_value));
+			Patch<int32_t>(advanced_graphics_gamma_display.get<void>(0x22 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_value));
+			Patch<int8_t>(advanced_graphics_gamma_display_arrow, EntryID::GRAPHICS_ADV_GAMMA);
+
+			Patch<int32_t>(advanced_graphics_fsaa_display_value, offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_FSAA].m_value));
+			Patch<int8_t>(advanced_graphics_fsaa_display_arrow, EntryID::GRAPHICS_ADV_FSAA);
+
+			InterceptCall(graphics_change_pattern.get<void>(-5), orgGraphics_SetupRenderFromMenuOptions, Graphics_Change_SetupRenderFromMenuOptions);
+
+			Menus::Patches::ExtraAdvancedGraphicsOptionsPatched = true;
 		}
 		TXN_CATCH();
 	}

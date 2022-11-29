@@ -10,6 +10,11 @@ using namespace Graphics::Patches;
 
 static void RecalculateMoviesDimensions();
 
+const Graphics_Config& Graphics_GetCurrentConfig()
+{
+	return *gGraphicsConfig;
+}
+
 float GetScaledResolutionWidth()
 {
 	return 480.0f * (static_cast<float>(GetResolutionWidth()) / GetResolutionHeight());
