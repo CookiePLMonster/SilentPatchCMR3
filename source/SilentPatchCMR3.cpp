@@ -933,7 +933,7 @@ namespace ScaledTexturesSupport
 			}
 			else
 			{
-				Core_Texture_SetFilteringMethod(result, D3DTEXF_LINEAR, D3DTEXF_LINEAR, D3DTEXF_POINT);
+				Core_Texture_SetFilteringMethod(result, D3DTEXF_LINEAR, D3DTEXF_LINEAR, D3DTEXF_LINEAR);
 			}
 		}
 		return result;
