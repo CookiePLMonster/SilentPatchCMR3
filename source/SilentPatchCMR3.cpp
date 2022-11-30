@@ -253,6 +253,14 @@ namespace TelemetryFadingLegend
 	}
 }
 
+namespace CappedResolutionCountdown
+{
+	int __cdecl sprintf_clamp(char* Buffer, const char* Format, const char* str1, int int1, const char* str2)
+	{
+		return sprintf_s(Buffer, 256, Format, str1, std::max(0, int1), str2);
+	}
+}
+
 namespace Timers
 {
 	static int64_t GetQPC()
@@ -2252,6 +2260,17 @@ void OnInitializeHook()
 
 		ReadCall(draw_2d_box.get<void>(18), orgHandyFunction_Draw2DBox);
 		InjectHook(draw_2d_box.get<void>(18), Draw2DBox_HackedAlpha);
+	}
+	TXN_CATCH();
+
+
+	// Fixed the resolution change counter going into negatives
+	try
+	{
+		using namespace CappedResolutionCountdown;
+
+		auto countdown_sprintf = get_pattern("E8 ? ? ? ? 83 C4 14 8D 4C 24 64");
+		InjectHook(countdown_sprintf, sprintf_clamp);
 	}
 	TXN_CATCH();
 
