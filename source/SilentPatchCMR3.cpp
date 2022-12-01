@@ -1141,6 +1141,33 @@ namespace NewGraphicsOptions
 		}
 	}
 
+	static void* PC_GraphicsAdvanced_Handle_JumpBack;
+	__declspec(naked) int PC_GraphicsAdvanced_Handle_Original(MenuDefinition* /*menu*/, uint32_t /*a2*/, int /*a3*/)
+	{
+		__asm
+		{
+			sub		esp, 50h
+			lea		eax, [esp+50h-50h]
+			jmp		[PC_GraphicsAdvanced_Handle_JumpBack]
+		}
+	}
+
+	static int gnCurrentWindowMode;
+	int PC_GraphicsAdvanced_Handle_NewOptions(MenuDefinition* menu, uint32_t a2, int a3)
+	{
+		const int adapter = menu->m_entries[EntryID::GRAPHICS_ADV_DRIVER].m_value;
+		const Graphics_Config& config = Graphics_GetCurrentConfig();
+
+		// Only care about switching to/from windowed mode, incl. borderless
+		if (adapter == *gnCurrentAdapter && gnCurrentWindowMode != config.m_windowed)
+		{
+			PC_GraphicsAdvanced_PopulateFromCaps(menu, adapter, adapter);
+		}
+		gnCurrentWindowMode = config.m_windowed;
+
+		return PC_GraphicsAdvanced_Handle_Original(menu, a2, a3);
+	}
+
 	uint32_t (*orgGraphics_SetupRenderFromMenuOptions)(Graphics_Config*);
 	uint32_t Graphics_Change_SetupRenderFromMenuOptions(Graphics_Config* config)
 	{
@@ -1148,6 +1175,18 @@ namespace NewGraphicsOptions
 		config->m_windowed = displayMode != 0;
 		config->m_borderless = displayMode == 2;
 		return orgGraphics_SetupRenderFromMenuOptions(config);
+	}
+
+	static D3DCAPS9* (*orgGraphics_GetAdapterCaps)(D3DCAPS9* hdc, int index);
+	D3DCAPS9* Graphics_GetAdapterCaps_DisableGammaForWindow(D3DCAPS9* hdc, int index)
+	{
+		D3DCAPS9* result = orgGraphics_GetAdapterCaps(hdc, index);
+		const Graphics_Config& config = Graphics_GetCurrentConfig();
+		if (config.m_windowed != 0)
+		{
+			result->Caps2 &= ~D3DCAPS2_FULLSCREENGAMMA;
+		}
+		return result;
 	}
 }
 
@@ -1486,6 +1525,9 @@ void OnInitializeHook()
 			get_pattern("E8 ? ? ? ? 6A 00 E8 ? ? ? ? E8 ? ? ? ? C2 08 00", 5 + 2),
 			get_pattern("E8 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? 50 E8 ? ? ? ? 50"),
 		};
+
+		gnCurrentAdapter = *get_pattern<int*>("A3 ? ? ? ? 56 50", 1);
+		PC_GraphicsAdvanced_PopulateFromCaps = reinterpret_cast<decltype(PC_GraphicsAdvanced_PopulateFromCaps)>(get_pattern("8D 84 24 ? ? ? ? 53 55", -6));
 
 		gmoFrontEndMenus = menus;
 		HookEach(update_menu_entries, InterceptCall);
@@ -2331,6 +2373,7 @@ void OnInitializeHook()
 
 		// Both inner scopes patch this independently
 		auto graphics_change_pattern = pattern("85 C0 74 0A 8D 4C 24 54").get_one();
+		auto gamma_on_adapter_change = pattern("C7 83 ? ? ? ? ? ? ? ? EB 1B").get_one();
 
 		// Try to decouple frontend options from the actual implementations
 		bool HasPatches_Windowed = false;
@@ -2347,6 +2390,7 @@ void OnInitializeHook()
 			};
 
 			auto set_window_pos_adjust = pattern("50 FF 15 ? ? ? ? A1 ? ? ? ? 8B 0D ? ? ? ? 89 44 24 0C").get_one();
+			auto disable_gamma_for_window = get_pattern("E8 ? ? ? ? B9 ? ? ? ? 8B F0 8D 7C 24 10 F3 A5 8D 8C 24");
 
 			ghInstance = *get_pattern<HINSTANCE*>("89 3D ? ? ? ? 89 44 24 14", 2);
 
@@ -2359,6 +2403,11 @@ void OnInitializeHook()
 
 			Patch(set_window_pos_adjust.get<void>(-0x22 + 2), &pSetWindowLongA_NOP);
 			Patch(set_window_pos_adjust.get<void>(1 + 2), &pSetWindowPos_Adjust);
+
+			InterceptCall(disable_gamma_for_window, orgGraphics_GetAdapterCaps, Graphics_GetAdapterCaps_DisableGammaForWindow);
+
+			// NOP gamma changes in windowed mode so switching to windowed mode doesn't reset the option
+			Nop(gamma_on_adapter_change.get<void>(0x12), 10);
 
 			HasPatches_Windowed = true;
 		}
@@ -2390,6 +2439,8 @@ void OnInitializeHook()
 			auto advanced_graphics_gamma_display_arrow = get_pattern("52 6A 07 56", 2);
 			auto advanced_graphics_fsaa_display_arrow = get_pattern("52 6A 08 56", 2);
 
+			auto advanced_graphics_handle_hook = pattern("83 EC 50 8D 44 24 00 53 55 56 57 50 E8").get_one();
+
 			PC_GraphicsAdvanced_Display_NewOptionsJumpBack = get_pattern("8B 44 24 1C 8B 4C 24 18 25 ? ? ? ? 6A 09");
 
 			void* fsaa_globals_value[] = {
@@ -2401,7 +2452,6 @@ void OnInitializeHook()
 			};
 
 			auto fsaa_on_adapter_change = pattern("8B 83 ? ? ? ? 7F 0A").get_one();
-			auto gamma_on_adapter_change = pattern("C7 83 ? ? ? ? ? ? ? ? EB 1B").get_one();
 			auto envmap_on_adapter_change1 = get_pattern("89 15 ? ? ? ? 8D 84 24", -6 + 2);
 			auto envmap_on_adapter_change2 = pattern("8B 83 ? ? ? ? 75 22").get_one();
 			auto shadows_on_adapter_change = pattern("89 15 ? ? ? ? 85 84 24").get_one();
@@ -2433,7 +2483,8 @@ void OnInitializeHook()
 			
 			Patch<int32_t>(gamma_on_adapter_change.get<void>(0 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_entryDataInt));
 			Patch<int32_t>(gamma_on_adapter_change.get<void>(0xC + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_visibilityAndName));
-			Patch<int32_t>(gamma_on_adapter_change.get<void>(0x12 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_value));
+			// Gamma m_value change was NOP'd above
+			//Patch<int32_t>(gamma_on_adapter_change.get<void>(0x12 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_value));
 			Patch<int32_t>(gamma_on_adapter_change.get<void>(0x21 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_visibilityAndName));
 
 			Patch<int32_t>(envmap_on_adapter_change1, offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_value));
@@ -2483,6 +2534,9 @@ void OnInitializeHook()
 			Patch<int8_t>(advanced_graphics_fsaa_display_arrow, EntryID::GRAPHICS_ADV_FSAA);
 
 			InterceptCall(graphics_change_pattern.get<void>(-5), orgGraphics_SetupRenderFromMenuOptions, Graphics_Change_SetupRenderFromMenuOptions);
+
+			PC_GraphicsAdvanced_Handle_JumpBack = advanced_graphics_handle_hook.get<void>(7);
+			InjectHook(advanced_graphics_handle_hook.get<void>(), PC_GraphicsAdvanced_Handle_NewOptions, PATCH_JUMP);
 
 			Menus::Patches::ExtraAdvancedGraphicsOptionsPatched = true;
 		}

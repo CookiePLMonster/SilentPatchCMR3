@@ -119,10 +119,14 @@ void PC_GraphicsAdvanced_SetGraphicsFromPresetQuality();
 void PC_GraphicsAdvanced_LoadSettings();
 void PC_GraphicsAdvanced_SaveSettings();
 
+inline void (*PC_GraphicsAdvanced_PopulateFromCaps)(MenuDefinition* menu, uint32_t currentAdapter, uint32_t newAdapter);
+
 void PC_GraphicsAdvanced_Enter_NewOptions(MenuDefinition* menu, int a2);
 MenuDefinition* PC_GraphicsAdvanced_Select_NewOptions(MenuDefinition* menu, MenuEntry* entry);
 
 void PC_GraphicsAdvanced_Display_NewOptions(MenuDefinition* menu, float interp, uint32_t posY, uint32_t entryID);
+
+inline int* gnCurrentAdapter;
 
 extern MenuDefinition* gmoFrontEndMenus;
 
