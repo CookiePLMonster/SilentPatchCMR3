@@ -2275,6 +2275,18 @@ void OnInitializeHook()
 	TXN_CATCH();
 
 
+	// Fixed menu entries fading incorrectly
+	try
+	{
+		auto on_submenu_enter = get_pattern("0F BF 46 18 39 44 24 20 75", 8);
+		auto on_submenu_exit = get_pattern("39 54 24 20 74", 4);
+
+		Patch<uint8_t>(on_submenu_enter, 0xEB);
+		Nop(on_submenu_exit, 2);
+	}
+	TXN_CATCH();
+
+
 	// Make the game portable
 	// Removes settings from registry and reliance on INSTALL_PATH
 	bool HasPatches_Registry = false;
