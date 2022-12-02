@@ -37,6 +37,7 @@ const char* Language_GetString(uint32_t ID)
 		{ FULLSCREEN, "Fullscreen" },
 		{ WINDOWED, "Windowed" },
 		{ BORDERLESS, "Borderless" },
+		{ VSYNC, "VSync" },
 	};
 	auto it = newLocalizedStrings.find(ID);
 	if (it != newLocalizedStrings.end())

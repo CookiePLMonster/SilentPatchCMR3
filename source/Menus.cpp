@@ -11,11 +11,6 @@ MenuDefinition* gmoFrontEndMenus;
 
 const bool bPolishExecutable = false;
 
-static uint32_t GetValueDefault(uint32_t val, uint32_t defValue)
-{
-	return val != 0 ? val : defValue;
-}
-
 static int32_t GetResolutionEntryFormatID(const MenuResolutionEntry* entry)
 {
 	switch (entry->m_format)
@@ -67,10 +62,11 @@ void FrontEndMenuSystem_SetupMenus_Custom(int languagesOnly)
 	if (Menus::Patches::ExtraAdvancedGraphicsOptionsPatched)
 	{
 		auto* advGraphicsShadows = &gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_entries[3];
-		auto* tempDest = &gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_entries[4];
+		auto* tempDest = &gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_entries[EntryID::GRAPHICS_ADV_TEXTUREQUALITY];
 		memmove(tempDest, advGraphicsShadows, (11 - 3) * sizeof(*advGraphicsShadows));
 
 		gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_entries[EntryID::GRAPHICS_ADV_DISPLAYMODE].m_entryDataInt = 3;
+		gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_entries[EntryID::GRAPHICS_ADV_VSYNC].m_entryDataInt = 2;
 
 		gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_numEntries = EntryID::GRAPHICS_ADV_NUM;
 	}
@@ -143,12 +139,12 @@ void PC_GraphicsAdvanced_SetGraphicsFromPresetQuality()
 
 void PC_GraphicsAdvanced_LoadSettings()
 {
-	const int32_t Adapter = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"ADAPTER");
+	const int32_t Adapter = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"ADAPTER").value_or(0);
 	const uint32_t NumAdapters = Graphics_GetNumAdapters();
 
 	// TODO: Desktop resolution
-	const uint32_t Width = GetValueDefault(Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"WIDTH"), 640);
-	const uint32_t Height = GetValueDefault(Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"HEIGHT"), 480);
+	const uint32_t Width = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"WIDTH").value_or(640);
+	const uint32_t Height = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"HEIGHT").value_or(480);
 
 	const Graphics_Config& config = Graphics_GetCurrentConfig();
 	Graphics_CheckForVertexShaders(config.m_adapter, 0, 1);
@@ -178,12 +174,14 @@ void PC_GraphicsAdvanced_LoadSettings()
 	auto& menu = gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED];
 	menu.m_entries[GRAPHICS_ADV_DRIVER].m_value = Adapter;
 	menu.m_entries[GRAPHICS_ADV_RESOLUTION].m_value = CMR_GetValidModeIndex(Adapter, Width, Height, BitDepth);
-	menu.m_entries[GRAPHICS_ADV_ZDEPTH].m_value = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"ZDEPTH");
-	menu.m_entries[GRAPHICS_ADV_FSAA].m_value = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"FSAA");
-	menu.m_entries[GRAPHICS_ADV_GAMMA].m_value = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"GAMMA");
+	menu.m_entries[GRAPHICS_ADV_ZDEPTH].m_value = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"ZDEPTH").value_or(0);
+	menu.m_entries[GRAPHICS_ADV_FSAA].m_value = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"FSAA").value_or(0);
+	menu.m_entries[GRAPHICS_ADV_GAMMA].m_value = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"GAMMA").value_or(1);
 
 	// New SP options
-	menu.m_entries[GRAPHICS_ADV_DISPLAYMODE].m_value = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"DISPLAY_MODE");
+	menu.m_entries[GRAPHICS_ADV_DISPLAYMODE].m_value = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, Registry::DISPLAY_MODE_KEY_NAME).value_or(0);
+	menu.m_entries[GRAPHICS_ADV_VSYNC].m_value = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, Registry::VSYNC_KEY_NAME).value_or(1);
+	menu.m_entries[GRAPHICS_ADV_VSYNC].m_displayBothOnOff = 1;
 
 	menu.m_entries[GRAPHICS_ADV_TEXTUREQUALITY].m_value = CMR_FE_GetTextureQuality();
 	menu.m_entries[GRAPHICS_ADV_ENVMAP].m_value = CMR_FE_GetEnvironmentMap();
@@ -232,10 +230,11 @@ void PC_GraphicsAdvanced_SaveSettings()
 	Registry::SetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"FSAA", menu.m_entries[GRAPHICS_ADV_FSAA].m_value);
 
 	// New SP options
-	Registry::SetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"DISPLAY_MODE", menu.m_entries[GRAPHICS_ADV_DISPLAYMODE].m_value);
+	Registry::SetRegistryDword(Registry::REGISTRY_SECTION_NAME, Registry::DISPLAY_MODE_KEY_NAME, menu.m_entries[GRAPHICS_ADV_DISPLAYMODE].m_value);
+	Registry::SetRegistryDword(Registry::REGISTRY_SECTION_NAME, Registry::VSYNC_KEY_NAME, menu.m_entries[GRAPHICS_ADV_VSYNC].m_value);
 }
 
-static int gSavedDriver, gSavedResolution, gSavedZDepth, gSavedDisplayMode, gSavedFSAA;
+static int gSavedDriver, gSavedResolution, gSavedZDepth, gSavedDisplayMode, gSavedFSAA, gSavedVSync;
 void PC_GraphicsAdvanced_Enter_NewOptions(MenuDefinition* menu, int /*a2*/)
 {
 	using namespace EntryID;
@@ -245,6 +244,7 @@ void PC_GraphicsAdvanced_Enter_NewOptions(MenuDefinition* menu, int /*a2*/)
 	gSavedZDepth = menu->m_entries[GRAPHICS_ADV_ZDEPTH].m_value;
 	gSavedDisplayMode = menu->m_entries[GRAPHICS_ADV_DISPLAYMODE].m_value;
 	gSavedFSAA = menu->m_entries[GRAPHICS_ADV_FSAA].m_value;
+	gSavedVSync = menu->m_entries[GRAPHICS_ADV_VSYNC].m_value;
 }
 
 MenuDefinition* PC_GraphicsAdvanced_Select_NewOptions(MenuDefinition* menu, MenuEntry* entry)
@@ -259,7 +259,8 @@ MenuDefinition* PC_GraphicsAdvanced_Select_NewOptions(MenuDefinition* menu, Menu
 	if (gSavedResolution != menu->m_entries[GRAPHICS_ADV_RESOLUTION].m_value
 		|| gSavedZDepth != menu->m_entries[GRAPHICS_ADV_ZDEPTH].m_value
 		|| gSavedDisplayMode != menu->m_entries[GRAPHICS_ADV_DISPLAYMODE].m_value
-		|| gSavedFSAA != menu->m_entries[GRAPHICS_ADV_FSAA].m_value)
+		|| gSavedFSAA != menu->m_entries[GRAPHICS_ADV_FSAA].m_value
+		|| gSavedVSync != menu->m_entries[GRAPHICS_ADV_VSYNC].m_value)
 	{
 		CMR_SetupRender();
 		return entry->m_destMenu;
@@ -269,7 +270,7 @@ MenuDefinition* PC_GraphicsAdvanced_Select_NewOptions(MenuDefinition* menu, Menu
 	return menu->m_prevMenu;
 }
 
-void PC_GraphicsAdvanced_Display_NewOptions(MenuDefinition* menu, float interp, uint32_t posY, uint32_t entryID)
+void PC_GraphicsAdvanced_Display_NewOptions(MenuDefinition* menu, float interp, uint32_t posY, uint32_t entryID, uint32_t offColor, uint32_t onColor)
 {
 	switch (entryID)
 	{
@@ -288,7 +289,37 @@ void PC_GraphicsAdvanced_Display_NewOptions(MenuDefinition* menu, float interp, 
 		DrawLeftRightArrows_RightAlign(menu, entryID, interp, leftArrowTextLength + 393, rightArrowTextLength + 393, posY);
 		break;
 	}
+	case EntryID::GRAPHICS_ADV_VSYNC:
+	{
+		sprintf_s(gszTempString, 512, "%s: ", Language_GetString(Language::VSYNC));
+		PC_GraphicsAdvanced_DisplayOnOff(menu, gszTempString, Language_GetString(85), Language_GetString(84), posY, menu->m_entries[EntryID::GRAPHICS_ADV_VSYNC].m_value,
+			offColor, onColor, interp, menu->m_entries[EntryID::GRAPHICS_ADV_VSYNC].m_displayBothOnOff != 0);
+		break;
+	}
 	default:
 		break;
+	}
+}
+
+void PC_GraphicsAdvanced_DisplayOnOff(MenuDefinition* /*menu*/, const char* optionText, const char* offText, const char* onText, uint32_t posY, int value, uint32_t offColor, uint32_t onColor, float interp, bool displayBoth)
+{
+	int currentPosX = CMR3Font_GetTextWidth(0, optionText) + 393;
+	if (value == 0)
+	{
+		std::swap(offColor, onColor);
+	}
+
+	char buf[256];
+	sprintf_s(buf, " %s ", offText);
+	if (displayBoth || value == 0)
+	{
+		CMR3Font_BlitText_RightAlign(0, buf, currentPosX, posY, HandyFunction_AlphaCombineFlat(offColor, static_cast<uint32_t>(interp * interp * 255.0f)), 9);
+		currentPosX += CMR3Font_GetTextWidth(0, buf);
+	}
+
+	if (displayBoth || value != 0)
+	{
+		sprintf_s(buf, displayBoth ?  "%s " : " %s ", onText);
+		CMR3Font_BlitText_RightAlign(0, buf, currentPosX, posY, HandyFunction_AlphaCombineFlat(onColor, static_cast<uint32_t>(interp * interp * 255.0f)), 9);
 	}
 }

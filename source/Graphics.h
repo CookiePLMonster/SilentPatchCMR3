@@ -25,7 +25,7 @@ struct Graphics_Config
 	int field_40;
 	int field_44;
 	int field_48;
-	int field_4C;
+	int m_presentationInterval;
 };
 static_assert(sizeof(Graphics_Config) == 0x50, "Wrong size: Graphics_Config");
 

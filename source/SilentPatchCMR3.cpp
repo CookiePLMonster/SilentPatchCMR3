@@ -39,7 +39,7 @@ namespace Localization
 	uint32_t (*orgGetLanguageIDByCode)(char code);
 	uint32_t GetCurrentLanguageID_Patched()
 	{
-		return orgGetLanguageIDByCode(Registry::GetRegistryChar(Registry::REGISTRY_SECTION_NAME, L"LANGUAGE"));
+		return orgGetLanguageIDByCode(Registry::GetRegistryChar(Registry::REGISTRY_SECTION_NAME, L"LANGUAGE").value_or('\0'));
 	}
 
 	uint32_t (*orgGetCurrentLanguageID)();
@@ -977,10 +977,13 @@ namespace NewGraphicsOptions
 	{
 		using namespace Registry;
 
-		const uint32_t displayMode = GetRegistryDword(REGISTRY_SECTION_NAME, DISPLAY_MODE_KEY_NAME);
+		const uint32_t displayMode = GetRegistryDword(REGISTRY_SECTION_NAME, DISPLAY_MODE_KEY_NAME).value_or(0);
 
 		config->m_windowed = displayMode != 0;
 		config->m_borderless = displayMode == 2;
+
+		config->m_presentationInterval = GetRegistryDword(REGISTRY_SECTION_NAME, VSYNC_KEY_NAME).value_or(1) != 0
+					? D3DPRESENT_INTERVAL_ONE : D3DPRESENT_INTERVAL_IMMEDIATE;
 
 		orgGraphics_Initialise(config);
 	}
@@ -1011,7 +1014,7 @@ namespace NewGraphicsOptions
 		{
 			using namespace Registry;
 
-			const uint32_t displayMode = GetRegistryDword(REGISTRY_SECTION_NAME, DISPLAY_MODE_KEY_NAME);
+			const uint32_t displayMode = GetRegistryDword(REGISTRY_SECTION_NAME, DISPLAY_MODE_KEY_NAME).value_or(0);
 			const char* windowName = "Colin McRae Rally 3";
 
 			DWORD dwStyle = 0;
@@ -1102,6 +1105,7 @@ namespace NewGraphicsOptions
 
 		// Those are "missing" from the Change call
 		gGraphicsConfig->m_borderless = config->m_borderless;
+		gGraphicsConfig->m_presentationInterval = config->m_presentationInterval;
 	}
 
 	template<std::size_t Index>
@@ -1132,10 +1136,12 @@ namespace NewGraphicsOptions
 	{
 		__asm
 		{
+			push	ebx // onColor
+			push	edi // offColor
 			push	eax // entryID
 			push	ebp // posY
-			push	dword ptr [esp+330h+8] // interp
-			push	dword ptr [esp+334h+4] // menu
+			push	dword ptr [esp+338h+8] // interp
+			push	dword ptr [esp+33Ch+4] // menu
 			call	PC_GraphicsAdvanced_Display_NewOptions
 			jmp		[PC_GraphicsAdvanced_Display_NewOptionsJumpBack]
 		}
@@ -1174,6 +1180,10 @@ namespace NewGraphicsOptions
 		const uint32_t displayMode = gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_entries[EntryID::GRAPHICS_ADV_DISPLAYMODE].m_value;
 		config->m_windowed = displayMode != 0;
 		config->m_borderless = displayMode == 2;
+
+		config->m_presentationInterval = gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_entries[EntryID::GRAPHICS_ADV_VSYNC].m_value != 0
+			? D3DPRESENT_INTERVAL_ONE : D3DPRESENT_INTERVAL_IMMEDIATE;
+
 		return orgGraphics_SetupRenderFromMenuOptions(config);
 	}
 
@@ -2376,7 +2386,7 @@ void OnInitializeHook()
 		auto gamma_on_adapter_change = pattern("C7 83 ? ? ? ? ? ? ? ? EB 1B").get_one();
 
 		// Try to decouple frontend options from the actual implementations
-		bool HasPatches_Windowed = false;
+		bool HasPatches_AdvancedGraphics = false;
 		try
 		{
 			auto nop_adjust_windowrect = get_pattern("FF 15 ? ? ? ? 6A 00", 2);
@@ -2387,6 +2397,11 @@ void OnInitializeHook()
 			std::array<void*, 2> graphics_change = {
 				graphics_change_pattern.get<void>(-5),
 				graphics_change_pattern.get<void>(9),
+			};
+
+			std::array<void*, 2> nop_presentinterval_changes = {
+				get_pattern("74 12 8D 4C 24 04"),
+				get_pattern("74 0E 8D 4C 24 0C"),
 			};
 
 			auto set_window_pos_adjust = pattern("50 FF 15 ? ? ? ? A1 ? ? ? ? 8B 0D ? ? ? ? 89 44 24 0C").get_one();
@@ -2409,13 +2424,18 @@ void OnInitializeHook()
 			// NOP gamma changes in windowed mode so switching to windowed mode doesn't reset the option
 			Nop(gamma_on_adapter_change.get<void>(0x12), 10);
 
-			HasPatches_Windowed = true;
+			for (void* addr : nop_presentinterval_changes)
+			{
+				Patch<uint8_t>(addr, 0xEB);
+			};
+
+			HasPatches_AdvancedGraphics = true;
 		}
 		TXN_CATCH();
 
 
 		// Only make frontend changes if all functionality has been successfully patched in
-		if (HasGlobals && HasGraphics && HasCMR3FE && HasCMR3Font && HasMenuHook && HasLanguageHook && HasPatches_Windowed) try
+		if (HasGlobals && HasGraphics && HasCMR3FE && HasCMR3Font && HasMenuHook && HasLanguageHook && HasPatches_AdvancedGraphics) try
 		{
 			auto graphics_advanced_enter = pattern("8B 46 24 A3 ? ? ? ? 8B 4E 4C").get_one();
 			auto graphics_advanced_select = get_pattern("50 E8 ? ? ? ? 8B 0D ? ? ? ? 8B 74 24 58", -0xD);
@@ -2507,7 +2527,7 @@ void OnInitializeHook()
 			void** orgJumpTable = *advanced_graphics_display_jump_table.get<void**>(0xB + 3);
 			static const void* advanced_graphics_display_new_jump_table[EntryID::GRAPHICS_ADV_NUM] = {
 				orgJumpTable[0], orgJumpTable[1], orgJumpTable[2],
-				&PC_GraphicsAdvanced_Display_CaseNewOptions,
+				&PC_GraphicsAdvanced_Display_CaseNewOptions, &PC_GraphicsAdvanced_Display_CaseNewOptions,
 				orgJumpTable[3], orgJumpTable[4], orgJumpTable[5], orgJumpTable[6], orgJumpTable[7], orgJumpTable[8],
 				orgJumpTable[9], orgJumpTable[10]
 			};

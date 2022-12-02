@@ -13,6 +13,8 @@ namespace Language
 	static constexpr uint32_t FULLSCREEN = FIRST_SP_STRING+1;
 	static constexpr uint32_t WINDOWED = FIRST_SP_STRING+2;
 	static constexpr uint32_t BORDERLESS = FIRST_SP_STRING+3;
+
+	static constexpr uint32_t VSYNC = FIRST_SP_STRING+4;
 }
 
 const char* Language_GetString(uint32_t ID);

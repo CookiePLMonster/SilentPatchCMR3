@@ -14,15 +14,16 @@ namespace EntryID
 	static constexpr size_t GRAPHICS_ADV_RESOLUTION = 1; // Original - 1
 	static constexpr size_t GRAPHICS_ADV_ZDEPTH = 2; // Original - 2
 	static constexpr size_t GRAPHICS_ADV_DISPLAYMODE = 3; // NEW
-	static constexpr size_t GRAPHICS_ADV_TEXTUREQUALITY = 4; // Original - 3
-	static constexpr size_t GRAPHICS_ADV_ENVMAP = 5; // Original - 4
-	static constexpr size_t GRAPHICS_ADV_SHADOWS = 6; // Original - 5
-	static constexpr size_t GRAPHICS_ADV_DRAWDISTANCE = 7; // Original - 6
-	static constexpr size_t GRAPHICS_ADV_GAMMA = 8; // Original - 7
-	static constexpr size_t GRAPHICS_ADV_FSAA = 9; // Original - 8
-	static constexpr size_t GRAPHICS_ADV_ACCEPT = 10; // Original - 9
-	static constexpr size_t GRAPHICS_ADV_CANCEL = 11; // Original - 10
-	static constexpr size_t GRAPHICS_ADV_NUM = 12; // Original - 11
+	static constexpr size_t GRAPHICS_ADV_VSYNC = 4; // NEW
+	static constexpr size_t GRAPHICS_ADV_TEXTUREQUALITY = 5; // Original - 3
+	static constexpr size_t GRAPHICS_ADV_ENVMAP = 6; // Original - 4
+	static constexpr size_t GRAPHICS_ADV_SHADOWS = 7; // Original - 5
+	static constexpr size_t GRAPHICS_ADV_DRAWDISTANCE = 8; // Original - 6
+	static constexpr size_t GRAPHICS_ADV_GAMMA = 9; // Original - 7
+	static constexpr size_t GRAPHICS_ADV_FSAA = 10; // Original - 8
+	static constexpr size_t GRAPHICS_ADV_ACCEPT = 11; // Original - 9
+	static constexpr size_t GRAPHICS_ADV_CANCEL = 12; // Original - 10
+	static constexpr size_t GRAPHICS_ADV_NUM = 13; // Original - 11
 }
 
 struct Packed_Registry
@@ -61,7 +62,9 @@ struct MenuEntry
 {
 	union {
 		struct {
-			uint32_t _pad2 : 24;
+			uint32_t _pad2 : 7;
+			uint32_t m_displayBothOnOff : 1;
+			uint32_t _pad3 : 16;
 			uint32_t m_canBeSelected : 1;
 			uint32_t m_isDisplayed : 1;
 			uint32_t m_wrapsValues : 1;
@@ -124,7 +127,9 @@ inline void (*PC_GraphicsAdvanced_PopulateFromCaps)(MenuDefinition* menu, uint32
 void PC_GraphicsAdvanced_Enter_NewOptions(MenuDefinition* menu, int a2);
 MenuDefinition* PC_GraphicsAdvanced_Select_NewOptions(MenuDefinition* menu, MenuEntry* entry);
 
-void PC_GraphicsAdvanced_Display_NewOptions(MenuDefinition* menu, float interp, uint32_t posY, uint32_t entryID);
+void PC_GraphicsAdvanced_Display_NewOptions(MenuDefinition* menu, float interp, uint32_t posY, uint32_t entryID, uint32_t offColor, uint32_t onColor);
+
+void PC_GraphicsAdvanced_DisplayOnOff(MenuDefinition* menu, const char* optionText, const char* offText, const char* onText, uint32_t entryID, int value, uint32_t offColor, uint32_t onColor, float interp, bool displayBoth);
 
 inline int* gnCurrentAdapter;
 
