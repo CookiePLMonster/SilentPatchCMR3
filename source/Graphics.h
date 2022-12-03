@@ -192,6 +192,56 @@ struct Object_StartLight
 };
 static_assert(sizeof(Object_StartLight) == 0x5C, "Wrong size: Object_StartLight");
 
+struct BlitLine2D_G
+{
+	uint32_t color[2];
+	float X[2];
+	float Y[2];
+	float Z[2];
+};
+static_assert(sizeof(BlitLine2D_G) == 32, "Wrong size: BlitLine2D_G");
+
+struct BlitLine3D_G
+{
+	float X1, Y1, Z1, W1;
+	float X2, Y2, Z2, W2;
+	uint32_t color[2];
+	float _gap3[2];
+};
+static_assert(sizeof(BlitLine3D_G) == 48, "Wrong size: BlitLine3D_G");
+
+struct BlitTri2D_G
+{
+	uint32_t color[3];
+	float X[3];
+	float Y[3];
+	float Z;
+};
+static_assert(sizeof(BlitTri2D_G) == 40, "Wrong size: BlitTri2D_G");
+
+struct BlitTri3D_G
+{
+	float X1, Y1, Z1, W1;
+	float X2, Y2, Z2, W2;
+	float X3, Y3, Z3, W3;
+	uint32_t color[3];
+	float _gap2;
+
+};
+static_assert(sizeof(BlitTri3D_G) == 64, "Wrong size: BlitTri3D_G");
+
+struct BlitQuad2D_GT
+{
+	uint32_t color[4];
+	float U[4];
+	float V[4];
+	float X[4];
+	float Y[4];
+	float Z;
+};
+static_assert(sizeof(BlitQuad2D_GT) == 84, "Wrong size: BlitQuad2D_GT");
+
+
 void Core_Texture_SetFilteringMethod(D3DTexture* texture, uint32_t min, uint32_t mag, uint32_t mip);
 
 OSD_Element* OSD_Element_Init_Center(OSD_Element* element, int posX, int posY, int width, int height, int a6, int a7, int a8, int a9, int a10, int a11);

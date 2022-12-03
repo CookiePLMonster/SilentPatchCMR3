@@ -428,44 +428,6 @@ namespace HalfPixel
 		return std::ceil(val) - 0.5f;
 	}
 
-	struct BlitLine2D_G
-	{
-		uint32_t color[2];
-		float X[2];
-		float Y[2];
-		float Z[2];
-	};
-	static_assert(sizeof(BlitLine2D_G) == 32, "Wrong size: BlitLine2D_G");
-
-	struct BlitLine3D_G
-	{
-		float X1, Y1, Z1, W1;
-		float X2, Y2, Z2, W2;
-		uint32_t color[2];
-		float _gap3[2];
-	};
-	static_assert(sizeof(BlitLine3D_G) == 48, "Wrong size: BlitLine3D_G");
-
-	struct BlitTri2D_G
-	{
-		uint32_t color[3];
-		float X[3];
-		float Y[3];
-		float Z;
-	};
-	static_assert(sizeof(BlitTri2D_G) == 40, "Wrong size: BlitTri2D_G");
-
-	struct BlitTri3D_G
-	{
-		float X1, Y1, Z1, W1;
-		float X2, Y2, Z2, W2;
-		float X3, Y3, Z3, W3;
-		uint32_t color[3];
-		float _gap2;
-
-	};
-	static_assert(sizeof(BlitTri3D_G) == 64, "Wrong size: BlitTri3D_G");
-
 	static XMVECTOR ComputePoint(float x, float y, const XMMATRIX& rot, const XMVECTOR& trans)
 	{
 		return XMVectorAdd(trans, XMVector2TransformNormal(XMVectorSet(x, y, 0.0f, 0.0f), rot));
