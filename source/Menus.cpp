@@ -30,6 +30,31 @@ static int32_t GetResolutionEntryFormatID(const MenuResolutionEntry* entry)
 	return -1;
 }
 
+static constexpr int FOV_MIN = 30;
+static constexpr int FOV_MAX = 150;
+static constexpr int FOV_STEP = 5;
+static constexpr int FOV_NUM_VALUES = ((FOV_MAX - FOV_MIN) / FOV_STEP) + 1;
+
+int CMR_FE_GetExteriorFOV()
+{
+	return Registry::GetRegistryDword(Registry::GRAPHICS_SECTION_NAME, Registry::EXTERIOR_FOV_KEY_NAME).value_or(75);
+}
+
+int CMR_FE_GetInteriorFOV()
+{
+	return Registry::GetRegistryDword(Registry::GRAPHICS_SECTION_NAME, Registry::INTERIOR_FOV_KEY_NAME).value_or(75);
+}
+
+void CMR_FE_SetExteriorFOV(int FOV)
+{
+	Registry::SetRegistryDword(Registry::GRAPHICS_SECTION_NAME, Registry::EXTERIOR_FOV_KEY_NAME, FOV);
+}
+
+void CMR_FE_SetInteriorFOV(int FOV)
+{
+	Registry::SetRegistryDword(Registry::GRAPHICS_SECTION_NAME, Registry::INTERIOR_FOV_KEY_NAME, FOV);
+}
+
 void DrawLeftRightArrows_RightAlign(MenuDefinition* menu, uint32_t entryID, float interp, int leftArrow, int rightArrow, uint32_t posY)
 {
 	const float scaledWidth = GetScaledResolutionWidth();
@@ -56,6 +81,31 @@ void FrontEndMenuSystem_SetupMenus_Custom(int languagesOnly)
 			gmoFrontEndMenus[29].m_curScrollTopEntry = 1;
 			gmoFrontEndMenus[29].m_curEntry = 1;
 		}
+	}
+
+	// Extended Graphics screen
+	if (Menus::Patches::ExtraGraphicsOptionsPatched)
+	{
+		auto& menu = gmoFrontEndMenus[MenuID::GRAPHICS];
+		{
+			// Make space for FOV control
+			auto* optSource = &menu.m_entries[4];
+			auto* optDest = optSource + 2;
+			memmove(optDest, optSource, 2 * sizeof(*optSource));
+		}
+
+		// Base off Graphics Quality as it's the closest
+		memcpy(&menu.m_entries[EntryID::GRAPHICS_EXTERIOR_FOV], &menu.m_entries[2], sizeof(menu.m_entries[2]));
+		menu.m_entries[EntryID::GRAPHICS_EXTERIOR_FOV].m_stringID = Language::EXTERIOR_FOV;
+		menu.m_entries[EntryID::GRAPHICS_EXTERIOR_FOV].m_entryDataString = nullptr;
+		menu.m_entries[EntryID::GRAPHICS_EXTERIOR_FOV].m_entryDataInt = FOV_NUM_VALUES;
+
+		memcpy(&menu.m_entries[EntryID::GRAPHICS_INTERIOR_FOV], &menu.m_entries[2], sizeof(menu.m_entries[2]));
+		menu.m_entries[EntryID::GRAPHICS_INTERIOR_FOV].m_stringID = Language::INTERIOR_FOV;
+		menu.m_entries[EntryID::GRAPHICS_INTERIOR_FOV].m_entryDataString = nullptr;
+		menu.m_entries[EntryID::GRAPHICS_INTERIOR_FOV].m_entryDataInt = FOV_NUM_VALUES;
+
+		menu.m_numEntries = EntryID::GRAPHICS_NUM;
 	}
 
 	// Expanded Advanced Graphics
@@ -378,4 +428,39 @@ void PC_GraphicsAdvanced_DisplayOnOff(MenuDefinition* /*menu*/, const char* opti
 		sprintf_s(buf, displayBoth ?  "%s " : " %s ", onText);
 		CMR3Font_BlitText_RightAlign(0, buf, currentPosX, posY, HandyFunction_AlphaCombineFlat(onColor, static_cast<uint32_t>(interp * interp * 255.0f)), 9);
 	}
+}
+
+void PC_GraphicsOptions_Display_NewOptions(MenuDefinition* menu, float interp, uint32_t posY, uint32_t entryID, uint32_t /*offColor*/, uint32_t /*onColor*/)
+{
+	switch (entryID)
+	{
+	case EntryID::GRAPHICS_EXTERIOR_FOV:
+	case EntryID::GRAPHICS_INTERIOR_FOV:
+	{
+		char* target = gszTempString;
+		char* const targetEnd = target+512;
+
+		target += sprintf_s(target, targetEnd - target, "%s: ", Language_GetString(menu->m_entries[entryID].m_stringID));
+		const int leftArrowTextLength = CMR3Font_GetTextWidth(0, gszTempString);
+		target += sprintf_s(target, targetEnd - target, " %d ", FOV_MIN + menu->m_entries[entryID].m_value * FOV_STEP);
+		const int rightArrowTextLength = CMR3Font_GetTextWidth(0, gszTempString);
+
+		DrawLeftRightArrows_RightAlign(menu, entryID, interp, leftArrowTextLength + 393, rightArrowTextLength + 393, posY);
+		break;
+	}
+	default:
+		break;
+	}
+}
+
+void PC_GraphicsOptions_Enter_NewOptions(MenuDefinition* menu, int /*a2*/)
+{
+	menu->m_entries[EntryID::GRAPHICS_EXTERIOR_FOV].m_value = (CMR_FE_GetExteriorFOV() - FOV_MIN) / FOV_STEP;
+	menu->m_entries[EntryID::GRAPHICS_INTERIOR_FOV].m_value = (CMR_FE_GetInteriorFOV() - FOV_MIN) / FOV_STEP;
+}
+
+void PC_GraphicsOptions_Exit_NewOptions(MenuDefinition* menu, int /*a2*/)
+{
+	CMR_FE_SetExteriorFOV(FOV_MIN + menu->m_entries[EntryID::GRAPHICS_EXTERIOR_FOV].m_value * FOV_STEP);
+	CMR_FE_SetInteriorFOV(FOV_MIN + menu->m_entries[EntryID::GRAPHICS_INTERIOR_FOV].m_value * FOV_STEP);
 }

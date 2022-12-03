@@ -21,6 +21,7 @@
 
 #include <algorithm>
 #include <array>
+#define _USE_MATH_DEFINES
 #include <cmath>
 #include <cstdint>
 #include <filesystem>
@@ -866,7 +867,7 @@ namespace ScaledTexturesSupport
 	}
 }
 
-namespace NewGraphicsOptions
+namespace NewAdvancedGraphicsOptions
 {
 	BOOL WINAPI AdjustWindowRectEx_NOP(LPRECT /*lpRect*/, DWORD /*dwStyle*/, BOOL /*bMenu*/, DWORD /*dwExStyle*/)
 	{
@@ -1212,6 +1213,49 @@ namespace NewGraphicsOptions
 	D3DTEXTUREFILTERTYPE GetAnisotropicFilter()
 	{
 		return D3DTEXF_ANISOTROPIC;
+	}
+}
+
+namespace NewGraphicsOptions
+{
+	static void* PC_GraphicsOptions_Display_NewOptionsJumpBack;
+	__declspec(naked) void PC_GraphicsOptions_Display_CaseNewOptions()
+	{
+		__asm
+		{
+			push	dword ptr [esp+228h-218h] // onColor
+			push	dword ptr [esp+22Ch-214h] // offColor
+			push	ebx // entryID
+			push	dword ptr [esp+234h-208h] // posY
+			push	dword ptr [esp+238h+8] // interp
+			push	dword ptr [esp+23Ch+4] // menu
+			call	PC_GraphicsOptions_Display_NewOptions
+			jmp		[PC_GraphicsOptions_Display_NewOptionsJumpBack]
+		}
+	}
+
+	static float exteriorFOV = static_cast<float>(75.0f * M_PI / 180.0f);
+	static float interiorFOV = static_cast<float>(75.0f * M_PI / 180.0f);
+
+	static void* (*orgCameras_AfterInitialise)();
+	void* Cameras_AfterInitialise()
+	{
+		exteriorFOV = static_cast<float>(CMR_FE_GetExteriorFOV() * M_PI / 180.0f);
+		interiorFOV = static_cast<float>(CMR_FE_GetInteriorFOV() * M_PI / 180.0f);
+
+		return orgCameras_AfterInitialise();
+	}
+
+	void Camera_SetFOV_Exterior(void* camera, float /*FOV*/)
+	{
+		float* fov = reinterpret_cast<float*>(static_cast<char*>(camera) + 4);
+		*fov = exteriorFOV;
+	}
+
+	void Camera_SetFOV_Interior(void* camera, float /*FOV*/)
+	{
+		float* fov = reinterpret_cast<float*>(static_cast<char*>(camera) + 4);
+		*fov = interiorFOV;
 	}
 }
 
@@ -2407,11 +2451,11 @@ void OnInitializeHook()
 
 
 	// Additional Advanced Graphics options
-	// Windowed Mode (TODO MORE)
+	// Windowed Mode, VSync, Anisotropic Filtering
 	// Requires patches: Registry (for saving/loading), Core D3D (for resizing windows), Graphics, RenderState (for AF)
 	if (HasPatches_Registry && HasCored3d && HasDestruct && HasGraphics && HasRenderState) try
 	{
-		using namespace NewGraphicsOptions;
+		using namespace NewAdvancedGraphicsOptions;
 
 		// Both inner scopes patch this independently
 		auto graphics_change_pattern = pattern("85 C0 74 0A 8D 4C 24 54").get_one();
@@ -2604,6 +2648,80 @@ void OnInitializeHook()
 			InjectHook(advanced_graphics_handle_hook.get<void>(), PC_GraphicsAdvanced_Handle_NewOptions, PATCH_JUMP);
 
 			Menus::Patches::ExtraAdvancedGraphicsOptionsPatched = true;
+		}
+		TXN_CATCH();
+	}
+	TXN_CATCH();
+
+	// Additional Graphics options
+	// FOV Control, TODO MORE
+	// Requires patches: Registry (for saving/loading)
+	if (HasPatches_Registry) try
+	{
+		using namespace NewGraphicsOptions;
+
+		bool HasPatches_Graphics = false;
+		try
+		{
+			auto cameras_after_initialise = get_pattern("7C E5 68 ? ? ? ? E8", 7);
+
+			void* exterior_fov[] = {
+				get_pattern("E8 ? ? ? ? 57 E8 ? ? ? ? 8B 45 08"),
+				get_pattern("E8 ? ? ? ? 85 FF 74 06 57 E8 ? ? ? ? 8B 45 08 85 C0 74 0B 6A 05"),
+			};
+
+			void* interior_fov[] = {
+				get_pattern("E8 ? ? ? ? 85 FF 74 06 57 E8 ? ? ? ? 8B 45 08 85 C0 74 0B 6A 04"),
+			};
+
+			for (void* addr : exterior_fov)
+			{
+				InjectHook(addr, Camera_SetFOV_Exterior);
+			}
+			for (void* addr : interior_fov)
+			{
+				InjectHook(addr, Camera_SetFOV_Interior);
+			}
+
+			InterceptCall(cameras_after_initialise, orgCameras_AfterInitialise, Cameras_AfterInitialise);
+
+			HasPatches_Graphics = true;
+		}
+		TXN_CATCH();
+
+		// Only make frontend changes if all functionality has been successfully patched in
+		if (HasGlobals && HasCMR3FE && HasCMR3Font && HasMenuHook && HasLanguageHook && HasPatches_Graphics) try
+		{	
+			void* back_locals[] = {
+				get_pattern("8D 85 ? ? ? ? 50 E8 ? ? ? ? BA", 2),
+			};
+
+			auto graphics_display_jump_table = pattern("83 FB 05 0F 87").get_one();
+			auto graphics_enter_new_options = get_pattern("89 86 ? ? ? ? E8 ? ? ? ? 5E", 6 + 5 + 1);
+			auto graphics_exit_new_options = get_pattern("8B 86 ? ? ? ? 50 E8 ? ? ? ? E8", 0x17);
+
+			PC_GraphicsOptions_Display_NewOptionsJumpBack = get_pattern("0F BF 55 18 3B DA 75 07");
+
+			for (void* addr : back_locals)
+			{
+				Patch<uint32_t>(addr, offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_BACK]));
+			}
+
+			// Build and inject a new jump table
+			Patch<uint8_t>(graphics_display_jump_table.get<void>(2), EntryID::GRAPHICS_NUM - 1);
+
+			void** orgJumpTable = *graphics_display_jump_table.get<void**>(9 + 3);
+			static const void* graphics_display_new_jump_table[EntryID::GRAPHICS_NUM] = {
+				orgJumpTable[0], orgJumpTable[1], orgJumpTable[2], orgJumpTable[3],
+				&PC_GraphicsOptions_Display_CaseNewOptions, &PC_GraphicsOptions_Display_CaseNewOptions,
+				orgJumpTable[4], orgJumpTable[5]
+			};
+			Patch(graphics_display_jump_table.get<void**>(9 + 3), &graphics_display_new_jump_table);
+
+			InjectHook(graphics_enter_new_options, PC_GraphicsOptions_Enter_NewOptions, PATCH_JUMP);
+			InjectHook(graphics_exit_new_options, PC_GraphicsOptions_Exit_NewOptions, PATCH_JUMP);
+
+			Menus::Patches::ExtraGraphicsOptionsPatched = true;
 		}
 		TXN_CATCH();
 	}

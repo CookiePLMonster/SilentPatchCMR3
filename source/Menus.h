@@ -5,6 +5,7 @@
 
 namespace MenuID
 {
+	static constexpr size_t GRAPHICS = 19; // Original - 19
 	static constexpr size_t GRAPHICS_ADVANCED = 20; // Original - 20
 }
 
@@ -25,6 +26,12 @@ namespace EntryID
 	static constexpr size_t GRAPHICS_ADV_ACCEPT = 12; // Original - 9
 	static constexpr size_t GRAPHICS_ADV_CANCEL = 13; // Original - 10
 	static constexpr size_t GRAPHICS_ADV_NUM = 14; // Original - 11
+
+	static constexpr size_t GRAPHICS_EXTERIOR_FOV = 4; // NEW
+	static constexpr size_t GRAPHICS_INTERIOR_FOV = 5; // NEW
+	static constexpr size_t GRAPHICS_ACCEPT = 6; // Original - 4
+	static constexpr size_t GRAPHICS_BACK = 7; // Original - 5
+	static constexpr size_t GRAPHICS_NUM = 8; // Original - 6
 }
 
 struct Packed_Registry
@@ -53,6 +60,11 @@ inline void (*CMR_FE_SetFSAA)(uint32_t);
 
 inline void (*CMR_FE_StoreRegistry)(const Packed_Registry* registry);
 
+int CMR_FE_GetExteriorFOV();
+int CMR_FE_GetInteriorFOV();
+void CMR_FE_SetExteriorFOV(int FOV);
+void CMR_FE_SetInteriorFOV(int FOV);
+
 inline void (*SetUseLowQualityTextures)(uint32_t);
 
 struct MenuDefinition;
@@ -65,7 +77,7 @@ struct MenuEntry
 		struct {
 			uint32_t _pad2 : 7;
 			uint32_t m_displayBothOnOff : 1;
-			uint32_t _pad3 : 16;
+			uint32_t m_stringID : 16;
 			uint32_t m_canBeSelected : 1;
 			uint32_t m_isDisplayed : 1;
 			uint32_t m_wrapsValues : 1;
@@ -133,11 +145,16 @@ void PC_GraphicsAdvanced_Display_NewOptions(MenuDefinition* menu, float interp, 
 
 void PC_GraphicsAdvanced_DisplayOnOff(MenuDefinition* menu, const char* optionText, const char* offText, const char* onText, uint32_t entryID, int value, uint32_t offColor, uint32_t onColor, float interp, bool displayBoth);
 
+void PC_GraphicsOptions_Display_NewOptions(MenuDefinition* menu, float interp, uint32_t posY, uint32_t entryID, uint32_t offColor, uint32_t onColor);
+void PC_GraphicsOptions_Enter_NewOptions(MenuDefinition* menu, int a2);
+void PC_GraphicsOptions_Exit_NewOptions(MenuDefinition* menu, int a2);
+
 inline int* gnCurrentAdapter;
 
 extern MenuDefinition* gmoFrontEndMenus;
 
 namespace Menus::Patches
 {
+	inline bool ExtraGraphicsOptionsPatched = false;
 	inline bool ExtraAdvancedGraphicsOptionsPatched = false;
 }

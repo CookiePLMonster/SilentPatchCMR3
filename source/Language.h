@@ -16,6 +16,9 @@ namespace Language
 
 	static constexpr uint32_t VSYNC = FIRST_SP_STRING+4;
 	static constexpr uint32_t ANISOTROPIC = FIRST_SP_STRING+5;
+
+	static constexpr uint32_t EXTERIOR_FOV = FIRST_SP_STRING+6;
+	static constexpr uint32_t INTERIOR_FOV = FIRST_SP_STRING+7;
 }
 
 const char* Language_GetString(uint32_t ID);

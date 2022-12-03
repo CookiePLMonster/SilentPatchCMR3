@@ -13,6 +13,9 @@ namespace Registry
 	inline const wchar_t* VSYNC_KEY_NAME = L"VSYNC";
 	inline const wchar_t* ANISOTROPIC_KEY_NAME = L"ANISOTROPIC";
 
+	inline const wchar_t* EXTERIOR_FOV_KEY_NAME = L"EXTERIOR_FOV";
+	inline const wchar_t* INTERIOR_FOV_KEY_NAME = L"INTERIOR_FOV";
+
 	void Init();
 
 	void* GetInstallString_Portable(const char* subkey, const char* value);

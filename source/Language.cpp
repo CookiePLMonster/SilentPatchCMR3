@@ -39,6 +39,9 @@ const char* Language_GetString(uint32_t ID)
 		{ BORDERLESS, "Borderless" },
 		{ VSYNC, "VSync" },
 		{ ANISOTROPIC, "Anisotropic Filtering" },
+
+		{ EXTERIOR_FOV, "FOV (Chase)" },
+		{ INTERIOR_FOV, "FOV (Interior)" },
 	};
 	auto it = newLocalizedStrings.find(ID);
 	if (it != newLocalizedStrings.end())
