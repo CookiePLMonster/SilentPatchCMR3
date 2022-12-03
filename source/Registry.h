@@ -11,6 +11,7 @@ namespace Registry
 
 	inline const wchar_t* DISPLAY_MODE_KEY_NAME = L"DISPLAY_MODE";
 	inline const wchar_t* VSYNC_KEY_NAME = L"VSYNC";
+	inline const wchar_t* ANISOTROPIC_KEY_NAME = L"ANISOTROPIC";
 
 	void Init();
 

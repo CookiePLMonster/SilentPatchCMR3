@@ -10,6 +10,32 @@ using namespace Graphics::Patches;
 
 static void RecalculateMoviesDimensions();
 
+static uint32_t gAnisotropicLevel = 1;
+
+void CMR_FE_SetAnisotropicLevel(uint32_t level)
+{
+	gAnisotropicLevel = 1 << level;
+}
+
+uint32_t CMR_FE_GetAnisotropicLevel()
+{
+	DWORD Index = 0;
+	return _BitScanForward(&Index, gAnisotropicLevel) != 0 ? Index : 0;
+}
+
+uint32_t CMR_FE_GetMaxAnisotropicLevel(int adapter)
+{
+	D3DCAPS9 caps;
+	Graphics_GetAdapterCaps(&caps, adapter);
+	return (caps.RasterCaps & D3DPRASTERCAPS_ANISOTROPY) != 0 ? caps.MaxAnisotropy : 1;
+}
+
+uint32_t CMR_GetAnisotropicLevel()
+{
+	const Graphics_Config& config = Graphics_GetCurrentConfig();
+	return std::min(gAnisotropicLevel, CMR_FE_GetMaxAnisotropicLevel(config.m_adapter));
+}
+
 const Graphics_Config& Graphics_GetCurrentConfig()
 {
 	return *gGraphicsConfig;

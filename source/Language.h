@@ -15,6 +15,7 @@ namespace Language
 	static constexpr uint32_t BORDERLESS = FIRST_SP_STRING+3;
 
 	static constexpr uint32_t VSYNC = FIRST_SP_STRING+4;
+	static constexpr uint32_t ANISOTROPIC = FIRST_SP_STRING+5;
 }
 
 const char* Language_GetString(uint32_t ID);

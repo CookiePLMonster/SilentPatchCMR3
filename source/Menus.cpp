@@ -61,14 +61,26 @@ void FrontEndMenuSystem_SetupMenus_Custom(int languagesOnly)
 	// Expanded Advanced Graphics
 	if (Menus::Patches::ExtraAdvancedGraphicsOptionsPatched)
 	{
-		auto* advGraphicsShadows = &gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_entries[3];
-		auto* tempDest = &gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_entries[EntryID::GRAPHICS_ADV_TEXTUREQUALITY];
-		memmove(tempDest, advGraphicsShadows, (11 - 3) * sizeof(*advGraphicsShadows));
+		auto& menu = gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED];
+		{
+			// Make space for Anisotropic Filtering
+			auto* optSource = &menu.m_entries[7];
+			auto* optDest = optSource + 3;
+			memmove(optDest, optSource, 4 * sizeof(*optSource));
+		}
+		{
+			// Make space for Display Mode and VSync
+			auto* optSource = &menu.m_entries[3];
+			auto* optDest = optSource + 2;
+			memmove(optDest, optSource, 4 * sizeof(*optSource));
+		}
 
-		gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_entries[EntryID::GRAPHICS_ADV_DISPLAYMODE].m_entryDataInt = 3;
-		gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_entries[EntryID::GRAPHICS_ADV_VSYNC].m_entryDataInt = 2;
+		menu.m_entries[EntryID::GRAPHICS_ADV_DISPLAYMODE].m_entryDataInt = 3;
+		menu.m_entries[EntryID::GRAPHICS_ADV_VSYNC].m_entryDataInt = 2;
+		menu.m_entries[EntryID::GRAPHICS_ADV_VSYNC].m_displayBothOnOff = 1;
+		menu.m_entries[EntryID::GRAPHICS_ADV_ANISOTROPIC].m_entryDataInt = 1;
 
-		gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_numEntries = EntryID::GRAPHICS_ADV_NUM;
+		menu.m_numEntries = EntryID::GRAPHICS_ADV_NUM;
 	}
 }
 
@@ -135,6 +147,7 @@ void PC_GraphicsAdvanced_SetGraphicsFromPresetQuality()
 	CMR_FE_SetEnvironmentMap(menu.m_entries[GRAPHICS_ADV_ENVMAP].m_value);
 	CMR_FE_SetDrawShadow(menu.m_entries[GRAPHICS_ADV_SHADOWS].m_value);
 	CMR_FE_SetDrawDistance(static_cast<uint32_t>(menu.m_entries[GRAPHICS_ADV_DRAWDISTANCE].m_value * 19.444444f + 80.0f));
+	CMR_FE_SetAnisotropicLevel(menu.m_entries[GRAPHICS_ADV_ANISOTROPIC].m_value);
 }
 
 void PC_GraphicsAdvanced_LoadSettings()
@@ -181,7 +194,7 @@ void PC_GraphicsAdvanced_LoadSettings()
 	// New SP options
 	menu.m_entries[GRAPHICS_ADV_DISPLAYMODE].m_value = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, Registry::DISPLAY_MODE_KEY_NAME).value_or(0);
 	menu.m_entries[GRAPHICS_ADV_VSYNC].m_value = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, Registry::VSYNC_KEY_NAME).value_or(1);
-	menu.m_entries[GRAPHICS_ADV_VSYNC].m_displayBothOnOff = 1;
+	menu.m_entries[GRAPHICS_ADV_ANISOTROPIC].m_value = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, Registry::ANISOTROPIC_KEY_NAME).value_or(0);
 
 	menu.m_entries[GRAPHICS_ADV_TEXTUREQUALITY].m_value = CMR_FE_GetTextureQuality();
 	menu.m_entries[GRAPHICS_ADV_ENVMAP].m_value = CMR_FE_GetEnvironmentMap();
@@ -218,6 +231,7 @@ void PC_GraphicsAdvanced_SaveSettings()
 	CMR_FE_SetFSAA(menu.m_entries[GRAPHICS_ADV_FSAA].m_value);
 	CMR_FE_SetDrawDistance(static_cast<int>(menu.m_entries[GRAPHICS_ADV_DRAWDISTANCE].m_value * 19.44444444f + 80.0f));
 	SetUseLowQualityTextures(menu.m_entries[GRAPHICS_ADV_TEXTUREQUALITY].m_value == 0);
+	CMR_FE_SetAnisotropicLevel(menu.m_entries[GRAPHICS_ADV_ANISOTROPIC].m_value);
 
 	Registry::SetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"ADAPTER", menu.m_entries[GRAPHICS_ADV_DRIVER].m_value);
 	Registry::SetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"ADAPTER_VID", AdapterVendorID);
@@ -232,12 +246,15 @@ void PC_GraphicsAdvanced_SaveSettings()
 	// New SP options
 	Registry::SetRegistryDword(Registry::REGISTRY_SECTION_NAME, Registry::DISPLAY_MODE_KEY_NAME, menu.m_entries[GRAPHICS_ADV_DISPLAYMODE].m_value);
 	Registry::SetRegistryDword(Registry::REGISTRY_SECTION_NAME, Registry::VSYNC_KEY_NAME, menu.m_entries[GRAPHICS_ADV_VSYNC].m_value);
+	Registry::SetRegistryDword(Registry::REGISTRY_SECTION_NAME, Registry::ANISOTROPIC_KEY_NAME, menu.m_entries[GRAPHICS_ADV_ANISOTROPIC].m_value);
 }
 
-static int gSavedDriver, gSavedResolution, gSavedZDepth, gSavedDisplayMode, gSavedFSAA, gSavedVSync;
+static int gSavedDriver, gSavedResolution, gSavedZDepth, gSavedDisplayMode, gSavedFSAA, gSavedVSync, gSavedAF;
 void PC_GraphicsAdvanced_Enter_NewOptions(MenuDefinition* menu, int /*a2*/)
 {
 	using namespace EntryID;
+
+	PC_GraphicsAdvanced_PopulateFromCaps_NewOptions(menu, menu->m_entries[GRAPHICS_ADV_DRIVER].m_value, menu->m_entries[GRAPHICS_ADV_DRIVER].m_value);
 
 	gSavedDriver = menu->m_entries[GRAPHICS_ADV_DRIVER].m_value;
 	gSavedResolution = menu->m_entries[GRAPHICS_ADV_RESOLUTION].m_value;
@@ -245,6 +262,7 @@ void PC_GraphicsAdvanced_Enter_NewOptions(MenuDefinition* menu, int /*a2*/)
 	gSavedDisplayMode = menu->m_entries[GRAPHICS_ADV_DISPLAYMODE].m_value;
 	gSavedFSAA = menu->m_entries[GRAPHICS_ADV_FSAA].m_value;
 	gSavedVSync = menu->m_entries[GRAPHICS_ADV_VSYNC].m_value;
+	gSavedAF = menu->m_entries[GRAPHICS_ADV_ANISOTROPIC].m_value;
 }
 
 MenuDefinition* PC_GraphicsAdvanced_Select_NewOptions(MenuDefinition* menu, MenuEntry* entry)
@@ -260,7 +278,8 @@ MenuDefinition* PC_GraphicsAdvanced_Select_NewOptions(MenuDefinition* menu, Menu
 		|| gSavedZDepth != menu->m_entries[GRAPHICS_ADV_ZDEPTH].m_value
 		|| gSavedDisplayMode != menu->m_entries[GRAPHICS_ADV_DISPLAYMODE].m_value
 		|| gSavedFSAA != menu->m_entries[GRAPHICS_ADV_FSAA].m_value
-		|| gSavedVSync != menu->m_entries[GRAPHICS_ADV_VSYNC].m_value)
+		|| gSavedVSync != menu->m_entries[GRAPHICS_ADV_VSYNC].m_value
+		|| gSavedAF != menu->m_entries[GRAPHICS_ADV_ANISOTROPIC].m_value)
 	{
 		CMR_SetupRender();
 		return entry->m_destMenu;
@@ -268,6 +287,21 @@ MenuDefinition* PC_GraphicsAdvanced_Select_NewOptions(MenuDefinition* menu, Menu
 
 	PC_GraphicsAdvanced_SaveSettings();
 	return menu->m_prevMenu;
+}
+
+void PC_GraphicsAdvanced_PopulateFromCaps_NewOptions(MenuDefinition* menu, uint32_t currentAdapter, uint32_t /*newAdapter*/)
+{
+	const int maxAF = CMR_FE_GetMaxAnisotropicLevel(currentAdapter);
+	if (maxAF >= 2)
+	{
+		menu->m_entries[EntryID::GRAPHICS_ADV_ANISOTROPIC].m_entryDataInt = 1 + static_cast<int>(log2(maxAF));
+		menu->m_entries[EntryID::GRAPHICS_ADV_ANISOTROPIC].m_canBeSelected = 1;
+	}
+	else
+	{
+		menu->m_entries[EntryID::GRAPHICS_ADV_ANISOTROPIC].m_entryDataInt = 1;
+		menu->m_entries[EntryID::GRAPHICS_ADV_ANISOTROPIC].m_canBeSelected = 0;
+	}
 }
 
 void PC_GraphicsAdvanced_Display_NewOptions(MenuDefinition* menu, float interp, uint32_t posY, uint32_t entryID, uint32_t offColor, uint32_t onColor)
@@ -294,6 +328,28 @@ void PC_GraphicsAdvanced_Display_NewOptions(MenuDefinition* menu, float interp, 
 		sprintf_s(gszTempString, 512, "%s: ", Language_GetString(Language::VSYNC));
 		PC_GraphicsAdvanced_DisplayOnOff(menu, gszTempString, Language_GetString(85), Language_GetString(84), posY, menu->m_entries[EntryID::GRAPHICS_ADV_VSYNC].m_value,
 			offColor, onColor, interp, menu->m_entries[EntryID::GRAPHICS_ADV_VSYNC].m_displayBothOnOff != 0);
+		break;
+	}
+	case EntryID::GRAPHICS_ADV_ANISOTROPIC:
+	{
+		char* target = gszTempString;
+		char* const targetEnd = target+512;
+
+		target += sprintf_s(target, targetEnd - target, "%s: ", Language_GetString(Language::ANISOTROPIC));
+		const int leftArrowTextLength = CMR3Font_GetTextWidth(0, gszTempString);
+
+		const int afValue = menu->m_entries[EntryID::GRAPHICS_ADV_ANISOTROPIC].m_value;
+		if (afValue > 0)
+		{
+			target += sprintf_s(target, targetEnd - target, " %dX ", 1 << afValue);
+		}
+		else
+		{
+			target += sprintf_s(target, targetEnd - target, " %s ", Language_GetString(85));
+		}
+		const int rightArrowTextLength = CMR3Font_GetTextWidth(0, gszTempString);
+
+		DrawLeftRightArrows_RightAlign(menu, entryID, interp, leftArrowTextLength + 393, rightArrowTextLength + 393, posY);
 		break;
 	}
 	default:

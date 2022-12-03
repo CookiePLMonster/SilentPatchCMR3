@@ -12,6 +12,7 @@
 #include "Graphics.h"
 #include "Language.h"
 #include "Menus.h"
+#include "RenderState.h"
 #include "Registry.h"
 
 #include <d3d9.h>
@@ -985,6 +986,10 @@ namespace NewGraphicsOptions
 		config->m_presentationInterval = GetRegistryDword(REGISTRY_SECTION_NAME, VSYNC_KEY_NAME).value_or(1) != 0
 					? D3DPRESENT_INTERVAL_ONE : D3DPRESENT_INTERVAL_IMMEDIATE;
 
+		CMR_FE_SetAnisotropicLevel(GetRegistryDword(REGISTRY_SECTION_NAME, ANISOTROPIC_KEY_NAME).value_or(0));
+
+		RenderState_InitialiseFallbackFilters(config->m_adapter);
+
 		orgGraphics_Initialise(config);
 	}
 
@@ -1078,7 +1083,7 @@ namespace NewGraphicsOptions
 	}
 	static const auto pSetWindowPos_Adjust = &SetWindowPos_Adjust;
 
-	void ResizeWindow(Graphics_Config* config)
+	void ResizeWindowAndUpdateConfig(Graphics_Config* config)
 	{
 		if (config->m_windowed != 0)
 		{
@@ -1106,6 +1111,8 @@ namespace NewGraphicsOptions
 		// Those are "missing" from the Change call
 		gGraphicsConfig->m_borderless = config->m_borderless;
 		gGraphicsConfig->m_presentationInterval = config->m_presentationInterval;
+
+		RenderState_InitialiseFallbackFilters(config->m_adapter);
 	}
 
 	template<std::size_t Index>
@@ -1114,7 +1121,7 @@ namespace NewGraphicsOptions
 	template<std::size_t Index>
 	uint32_t Graphics_Change_ResizeWindow(Graphics_Config* config)
 	{
-		ResizeWindow(config);
+		ResizeWindowAndUpdateConfig(config);
 		return orgGraphics_Change<Index>(config);
 	}
 
@@ -1168,6 +1175,7 @@ namespace NewGraphicsOptions
 		if (adapter == *gnCurrentAdapter && gnCurrentWindowMode != config.m_windowed)
 		{
 			PC_GraphicsAdvanced_PopulateFromCaps(menu, adapter, adapter);
+			PC_GraphicsAdvanced_PopulateFromCaps_NewOptions(menu, adapter, adapter);
 		}
 		gnCurrentWindowMode = config.m_windowed;
 
@@ -1184,6 +1192,8 @@ namespace NewGraphicsOptions
 		config->m_presentationInterval = gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_entries[EntryID::GRAPHICS_ADV_VSYNC].m_value != 0
 			? D3DPRESENT_INTERVAL_ONE : D3DPRESENT_INTERVAL_IMMEDIATE;
 
+		CMR_FE_SetAnisotropicLevel(gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_entries[EntryID::GRAPHICS_ADV_ANISOTROPIC].m_value);
+
 		return orgGraphics_SetupRenderFromMenuOptions(config);
 	}
 
@@ -1197,6 +1207,49 @@ namespace NewGraphicsOptions
 			result->Caps2 &= ~D3DCAPS2_FULLSCREENGAMMA;
 		}
 		return result;
+	}
+
+
+	// Anisotropic Filtering
+	static void* RenderState_SetSamplerState_JumpBack;
+	static int* guSSChanges;
+	__declspec(naked) void RenderState_SetSamplerState_Original(DWORD /*Sampler*/, D3DSAMPLERSTATETYPE /*Type*/, DWORD /*Value*/)
+	{
+		__asm
+		{
+			mov		edx, [guSSChanges]
+			mov		edx, dword ptr [edx]
+			jmp		[RenderState_SetSamplerState_JumpBack]
+		}
+	}
+
+	void RenderState_SetSamplerState_Fallback(DWORD Sampler, D3DSAMPLERSTATETYPE Type, DWORD Value)
+	{
+		RenderState_SetSamplerState_Original(Sampler, Type, RenderState_GetFallbackSamplerValue(Type, Value));
+	}
+
+	static void (*orgMarkProfiler)(void*);
+	void MarkProfiler_SetAF(void* a1)
+	{
+		orgMarkProfiler(a1);
+
+		const DWORD anisotropicLevel = CMR_GetAnisotropicLevel();
+		for (DWORD Sampler = 0; Sampler < 8; ++Sampler)
+		{
+			RenderState_SetTextureAnisotropicLevel(Sampler, anisotropicLevel);
+		}
+	}
+
+	static void (*orgSetMipBias)(D3DTexture*, float);
+	void Texture_SetMipBiasAndAnisotropic(D3DTexture* texture, float bias)
+	{
+		orgSetMipBias(texture, bias);
+		Core_Texture_SetFilteringMethod(texture, D3DTEXF_ANISOTROPIC, D3DTEXF_ANISOTROPIC, D3DTEXF_LINEAR);
+	}
+
+	D3DTEXTUREFILTERTYPE GetAnisotropicFilter()
+	{
+		return D3DTEXF_ANISOTROPIC;
 	}
 }
 
@@ -1357,6 +1410,7 @@ void OnInitializeHook()
 		auto get_current_config = reinterpret_cast<uintptr_t>(ReadCallFrom(get_pattern("E8 ? ? ? ? 51 8B 7C 24 68")));
 		auto check_for_vertex_shaders = get_pattern("81 EC ? ? ? ? 8D 8C 24", -4);
 		auto setup_render = get_pattern("81 EC ? ? ? ? 56 8D 44 24 08");
+		auto get_adapter_caps = get_pattern("8B 08 81 EC ? ? ? ? 56", -5);
 
 		auto save_func = pattern("E8 ? ? ? ? 8B 0D ? ? ? ? 6A FF 51 8B F8 E8").get_one();
 		auto get_modes = pattern("E8 ? ? ? ? 33 F6 85 C0 89 44 24 14").get_one();
@@ -1364,6 +1418,7 @@ void OnInitializeHook()
 		Graphics_SetGammaRamp = reinterpret_cast<decltype(Graphics_SetGammaRamp)>(set_gamma_ramp);
 		Graphics_GetNumAdapters = reinterpret_cast<decltype(Graphics_GetNumAdapters)>(get_num_adapters);
 		Graphics_CheckForVertexShaders = reinterpret_cast<decltype(Graphics_CheckForVertexShaders)>(check_for_vertex_shaders);
+		Graphics_GetAdapterCaps = reinterpret_cast<decltype(Graphics_GetAdapterCaps)>(get_adapter_caps);
 
 		CMR_GetAdapterProductID = reinterpret_cast<decltype(CMR_GetAdapterProductID)>(ReadCallFrom(save_func.get<void>(0)));
 		CMR_GetAdapterVendorID = reinterpret_cast<decltype(CMR_GetAdapterVendorID)>(ReadCallFrom(save_func.get<void>(0x10)));
@@ -1377,6 +1432,21 @@ void OnInitializeHook()
 		gGraphicsConfig = *reinterpret_cast<Graphics_Config**>(get_current_config + 0xC);
 
 		HasGraphics = true;
+	}
+	TXN_CATCH();
+
+	bool HasRenderState = false;
+	try
+	{
+		RenderState_SetSamplerState = reinterpret_cast<decltype(RenderState_SetSamplerState)>(ReadCallFrom(get_pattern("E8 ? ? ? ? D9 44 24 0C D9 1C B5 ? ? ? ? D9 44 24 08")));
+		CurrentRenderState = *get_pattern<RenderState*>("8B 0D ? ? ? ? A1 ? ? ? ? 8B 10 51 6A 07", 2);
+
+		// Facade initialization
+		const uintptr_t RenderStateStart = reinterpret_cast<uintptr_t>(CurrentRenderState);
+		const uintptr_t MaxAnisotropy = *get_pattern<uintptr_t>("89 1C B5 ? ? ? ? 8B 0C B5", 7 + 3);
+		RenderStateFacade::OFFS_maxAnisotropy = MaxAnisotropy - RenderStateStart;
+
+		HasRenderState = true;
 	}
 	TXN_CATCH();
 
@@ -2376,8 +2446,8 @@ void OnInitializeHook()
 
 	// Additional Advanced Graphics options
 	// Windowed Mode (TODO MORE)
-	// Requires patches: Registry (for saving/loading), Core D3D (for resizing windows)
-	if (HasPatches_Registry && HasCored3d && HasDestruct) try
+	// Requires patches: Registry (for saving/loading), Core D3D (for resizing windows), Graphics, RenderState (for AF)
+	if (HasPatches_Registry && HasCored3d && HasDestruct && HasGraphics && HasRenderState) try
 	{
 		using namespace NewGraphicsOptions;
 
@@ -2393,6 +2463,11 @@ void OnInitializeHook()
 			auto find_window_ex = get_pattern("FF 15 ? ? ? ? 85 C0 74 0A", 2);
 			auto create_class_and_window = get_pattern("83 EC 28 8B 44 24 38");
 			auto graphics_initialise = get_pattern("E8 ? ? ? ? 8B 54 24 24 89 5C 24 18");
+
+			auto set_sampler_state = reinterpret_cast<uintptr_t>(ReadCallFrom(get_pattern("E8 ? ? ? ? D9 44 24 0C D9 1C B5 ? ? ? ? D9 44 24 08")));
+			auto render_game_common1_set_af = get_pattern("E8 ? ? ? ? 68 ? ? ? ? 6A 03 E8 ? ? ? ? E8 ? ? ? ? 8B 5C 24 30 85 C0 74 06 53 E8");
+			auto get_filtering_method_for_3d = ReadCallFrom(get_pattern("E8 ? ? ? ? 8B 17 50"));
+			auto set_mip_bias_and_anisotropic = get_pattern("E8 ? ? ? ? 8D 4C 24 20 51 57");
 
 			std::array<void*, 2> graphics_change = {
 				graphics_change_pattern.get<void>(-5),
@@ -2428,6 +2503,14 @@ void OnInitializeHook()
 			{
 				Patch<uint8_t>(addr, 0xEB);
 			};
+
+			guSSChanges = *reinterpret_cast<int**>(set_sampler_state + 2);
+			RenderState_SetSamplerState_JumpBack = reinterpret_cast<void*>(set_sampler_state + 6);
+			InjectHook(set_sampler_state, RenderState_SetSamplerState_Fallback, PATCH_JUMP);
+
+			InterceptCall(render_game_common1_set_af, orgMarkProfiler, MarkProfiler_SetAF);
+			InjectHook(get_filtering_method_for_3d, GetAnisotropicFilter, PATCH_JUMP);
+			InterceptCall(set_mip_bias_and_anisotropic, orgSetMipBias, Texture_SetMipBiasAndAnisotropic);
 
 			HasPatches_AdvancedGraphics = true;
 		}
@@ -2528,7 +2611,7 @@ void OnInitializeHook()
 			static const void* advanced_graphics_display_new_jump_table[EntryID::GRAPHICS_ADV_NUM] = {
 				orgJumpTable[0], orgJumpTable[1], orgJumpTable[2],
 				&PC_GraphicsAdvanced_Display_CaseNewOptions, &PC_GraphicsAdvanced_Display_CaseNewOptions,
-				orgJumpTable[3], orgJumpTable[4], orgJumpTable[5], orgJumpTable[6], orgJumpTable[7], orgJumpTable[8],
+				orgJumpTable[3], orgJumpTable[4], orgJumpTable[5], orgJumpTable[6], &PC_GraphicsAdvanced_Display_CaseNewOptions, orgJumpTable[7], orgJumpTable[8],
 				orgJumpTable[9], orgJumpTable[10]
 			};
 			Patch(advanced_graphics_display_jump_table.get<void**>(0xB + 3), &advanced_graphics_display_new_jump_table);

@@ -1,5 +1,6 @@
 #pragma once
 
+#define NOMINMAX
 #include <d3d9.h>
 
 #include <cstddef>
@@ -214,12 +215,19 @@ inline void (*Keyboard_DrawTextEntryBox)(int posX, int posY, int a3, int a4, uin
 inline void (*Graphics_SetGammaRamp)(int flag, float gamma);
 inline uint32_t (*Graphics_GetNumAdapters)();
 inline void (*Graphics_CheckForVertexShaders)(int, int, int);
+inline D3DCAPS9* (*Graphics_GetAdapterCaps)(D3DCAPS9* hdc, int index);
 
 inline int32_t (*CMR_GetAdapterProductID)(int32_t, int32_t);
 inline int32_t (*CMR_GetAdapterVendorID)(int32_t, int32_t);
 inline int32_t (*CMR_GetValidModeIndex)(int32_t, int32_t, int32_t, int32_t);
 inline int32_t (*CMR_ValidateModeFormats)(int32_t adapter);
 inline void (*CMR_SetupRender)();
+
+void CMR_FE_SetAnisotropicLevel(uint32_t level);
+uint32_t CMR_FE_GetAnisotropicLevel();
+uint32_t CMR_FE_GetMaxAnisotropicLevel(int adapter);
+
+uint32_t CMR_GetAnisotropicLevel();
 
 inline const MenuResolutionEntry* (*GetMenuResolutionEntry)(int32_t, int32_t);
 

@@ -19,11 +19,12 @@ namespace EntryID
 	static constexpr size_t GRAPHICS_ADV_ENVMAP = 6; // Original - 4
 	static constexpr size_t GRAPHICS_ADV_SHADOWS = 7; // Original - 5
 	static constexpr size_t GRAPHICS_ADV_DRAWDISTANCE = 8; // Original - 6
-	static constexpr size_t GRAPHICS_ADV_GAMMA = 9; // Original - 7
-	static constexpr size_t GRAPHICS_ADV_FSAA = 10; // Original - 8
-	static constexpr size_t GRAPHICS_ADV_ACCEPT = 11; // Original - 9
-	static constexpr size_t GRAPHICS_ADV_CANCEL = 12; // Original - 10
-	static constexpr size_t GRAPHICS_ADV_NUM = 13; // Original - 11
+	static constexpr size_t GRAPHICS_ADV_ANISOTROPIC = 9; // NEW
+	static constexpr size_t GRAPHICS_ADV_GAMMA = 10; // Original - 7
+	static constexpr size_t GRAPHICS_ADV_FSAA = 11; // Original - 8
+	static constexpr size_t GRAPHICS_ADV_ACCEPT = 12; // Original - 9
+	static constexpr size_t GRAPHICS_ADV_CANCEL = 13; // Original - 10
+	static constexpr size_t GRAPHICS_ADV_NUM = 14; // Original - 11
 }
 
 struct Packed_Registry
@@ -126,6 +127,7 @@ inline void (*PC_GraphicsAdvanced_PopulateFromCaps)(MenuDefinition* menu, uint32
 
 void PC_GraphicsAdvanced_Enter_NewOptions(MenuDefinition* menu, int a2);
 MenuDefinition* PC_GraphicsAdvanced_Select_NewOptions(MenuDefinition* menu, MenuEntry* entry);
+void PC_GraphicsAdvanced_PopulateFromCaps_NewOptions(MenuDefinition* menu, uint32_t currentAdapter, uint32_t newAdapter);
 
 void PC_GraphicsAdvanced_Display_NewOptions(MenuDefinition* menu, float interp, uint32_t posY, uint32_t entryID, uint32_t offColor, uint32_t onColor);
 
