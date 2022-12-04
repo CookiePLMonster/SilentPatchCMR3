@@ -33,15 +33,15 @@ const char* Language_GetString(uint32_t ID)
 		{ 1028, "PgDn" }, { 1029, "Right" }, { 1030, "Left" }, { 1031, "Up" },
 		{ 1032, "Down" }, { 1033, "[?]" },
 
-		{ DISPLAY_MODE, "Display Mode" },
-		{ FULLSCREEN, "Fullscreen" },
-		{ WINDOWED, "Windowed" },
-		{ BORDERLESS, "Borderless" },
-		{ VSYNC, "VSync" },
-		{ ANISOTROPIC, "Anisotropic Filtering" },
+		{ DISPLAY_MODE, "DISPLAY MODE" },
+		{ FULLSCREEN, "FULLSCREEN" },
+		{ WINDOWED, "WINDOWED" },
+		{ BORDERLESS, "BORDERLESS" },
+		{ VSYNC, "VSYNC" },
+		{ ANISOTROPIC, "ANISOTROPIC FILTERING" },
 
-		{ EXTERIOR_FOV, "FOV (Chase)" },
-		{ INTERIOR_FOV, "FOV (Interior)" },
+		{ EXTERIOR_FOV, "FOV (CHASE)" },
+		{ INTERIOR_FOV, "FOV (INTERIOR)" },
 	};
 	auto it = newLocalizedStrings.find(ID);
 	if (it != newLocalizedStrings.end())
