@@ -24,14 +24,14 @@ const char* Language_GetString(uint32_t ID)
 	// All strings that were hardcoded in the English release, but translated in the Polish release
 	static const std::map<uint32_t, const char*> newLocalizedStrings = {
 		{ 994, "NA" },
-		{ 1004, "Return" }, { 1005, "Esc" }, { 1006, "BackSpc" }, { 1007, "TAB" },
+		{ 1004, "RETURN" }, { 1005, "ESC" }, { 1006, "BACKSPC" }, { 1007, "TAB" },
 		{ 1008, "F1" }, { 1009, "F2" }, { 1010, "F3" }, { 1011, "F4" },
 		{ 1012, "F5" }, { 1013, "F6" }, { 1014, "F7" }, { 1015, "F8" },
 		{ 1016, "F9" }, { 1017, "F10" }, { 1018, "F11" }, { 1019, "F12" },
-		{ 1020, "PrintScrn" }, { 1021, "ScrollLock" }, { 1022, "Pause" }, { 1023, "Insert" },
-		{ 1024, "Home" }, { 1025, "PgUp" }, { 1026, "Del" }, { 1027, "End" },
-		{ 1028, "PgDn" }, { 1029, "Right" }, { 1030, "Left" }, { 1031, "Up" },
-		{ 1032, "Down" }, { 1033, "[?]" },
+		{ 1020, "PRINTSCRN" }, { 1021, "SCROLLLOCK" }, { 1022, "PAUSE" }, { 1023, "INSERT" },
+		{ 1024, "HOME" }, { 1025, "PGUP" }, { 1026, "DEL" }, { 1027, "END" },
+		{ 1028, "PGDN" }, { 1029, "RIGHT" }, { 1030, "LEFT" }, { 1031, "UP" },
+		{ 1032, "DOWN" }, { 1033, "[?]" },
 
 		{ DISPLAY_MODE, "DISPLAY MODE" },
 		{ FULLSCREEN, "FULLSCREEN" },

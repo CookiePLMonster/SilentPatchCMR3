@@ -263,6 +263,46 @@ namespace CappedResolutionCountdown
 	}
 }
 
+namespace ConsistentControlsScreen
+{
+	template<std::size_t Index>
+	const char* (*orgLanguage_GetString)(uint32_t ID);
+
+	template<std::size_t Index>
+	static const char* Language_GetString_Formatted(uint32_t ID)
+	{
+		sprintf_s(gszTempString, 512, " %s", orgLanguage_GetString<Index>(ID));
+		return gszTempString;
+	}
+
+	template<std::size_t Ctr, typename Tuple, std::size_t... I, typename Func>
+	void HookEachImpl(Tuple&& tuple, std::index_sequence<I...>, Func&& f)
+	{
+		(f(std::get<I>(tuple), orgLanguage_GetString<Ctr << 16 | I>, Language_GetString_Formatted<Ctr << 16 | I>), ...);
+	}
+
+	template<std::size_t Ctr = 0, typename Vars, typename Func>
+	void HookEach(Vars&& vars, Func&& f)
+	{
+		auto tuple = std::tuple_cat(std::forward<Vars>(vars));
+		HookEachImpl<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
+	}
+
+	static int (*orgGetControllerName)(void* a1, const char** outText);
+	static int GetControllerName_Uppercase(void* a1, const char** outText)
+	{
+		const char* text = nullptr;
+		const int result = orgGetControllerName(a1, &text);
+
+		static char stringBuffer[MAX_PATH]; // Corresponds to DirectInput's cap
+		auto it =std::transform(text, text + strlen(text), stringBuffer, ::toupper);
+		*it = '\0';
+
+		*outText = stringBuffer;
+		return result;
+	}
+}
+
 namespace Timers
 {
 	static int64_t GetQPC()
@@ -2411,6 +2451,30 @@ void OnInitializeHook()
 
 		Patch<uint8_t>(on_submenu_enter, 0xEB);
 		Nop(on_submenu_exit, 2);
+	}
+	TXN_CATCH();
+
+
+	// Fixed an inconsistent Controls screen
+	try
+	{
+		using namespace ConsistentControlsScreen;
+
+		char* wrong_format_string = *get_pattern<char*>("68 ? ? ? ? 68 ? ? ? ? E8 ? ? ? ? 8B 4C 24 34", 1);
+		auto uppercase_controller_name = get_pattern("E8 ? ? ? ? 8B 44 24 20 83 F8 04");
+
+		auto get_language_sprintf_pattern = pattern("50 56 68 74 03 00 00 E8 ? ? ? ? 50").count(2);
+		std::array<void*, 2> get_language_sprintf = {
+			get_language_sprintf_pattern.get(0).get<void>(7),
+			get_language_sprintf_pattern.get(1).get<void>(7),
+		};
+
+		// Patch the string directly, whatevz
+		strcpy_s(wrong_format_string, 6, "%s: ");
+
+		InterceptCall(uppercase_controller_name, orgGetControllerName, GetControllerName_Uppercase);
+
+		HookEach(get_language_sprintf, InterceptCall);
 	}
 	TXN_CATCH();
 
