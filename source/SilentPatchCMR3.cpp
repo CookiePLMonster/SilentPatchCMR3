@@ -303,6 +303,33 @@ namespace ConsistentControlsScreen
 	}
 }
 
+namespace EnvMapWithSky
+{
+	static bool alwaysDrawSky = true;
+	static void* (*orgAfterSetupTextureStages)();
+	static void* Graphics_CarMultitexture_AfterSetupTextureStages()
+	{
+		alwaysDrawSky = Registry::GetRegistryDword(Registry::ADVANCED_SECTION_NAME, Registry::ENVMAP_SKY_KEY_NAME).value_or(1) != 0;	
+		return orgAfterSetupTextureStages();
+	}
+
+	static int (*orgSfxEnable)(void* a1);
+	int SFX_Enable_Force(void* a1)
+	{
+#ifndef NDEBUG
+		if (GetAsyncKeyState(VK_F3) & 0x8000)
+		{
+			return 0;
+		}
+#endif
+		if (alwaysDrawSky)
+		{
+			return 1;
+		}
+		return orgSfxEnable(a1);
+	}
+}
+
 namespace Timers
 {
 	static int64_t GetQPC()
@@ -2510,6 +2537,28 @@ void OnInitializeHook()
 
 		Registry::Init();
 		HasPatches_Registry = true;
+	}
+	TXN_CATCH();
+
+
+	// Reflection map reflecting the sky
+	// Registry is an optional dependency - without it, we can't restore "old" reflections via the INI file
+	try
+	{
+		using namespace EnvMapWithSky;
+
+		auto render_refmap_sfx_check = get_pattern("6A 02 E8 ? ? ? ? 85 C0 0F 85 ? ? ? ? 89 44 24 60", 2);
+
+		InterceptCall(render_refmap_sfx_check, orgSfxEnable, SFX_Enable_Force);
+
+		// Only patch the switch if we have registry
+		if (HasPatches_Registry) try
+		{
+			auto after_setup_texture_stages = get_pattern("DD D8 E8 ? ? ? ? 50 E8", 2);
+
+			InterceptCall(after_setup_texture_stages, orgAfterSetupTextureStages, Graphics_CarMultitexture_AfterSetupTextureStages);
+		}
+		TXN_CATCH();
 	}
 	TXN_CATCH();
 

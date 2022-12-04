@@ -8,6 +8,7 @@ namespace Registry
 {
 	inline const wchar_t* GRAPHICS_SECTION_NAME = L"Graphics";
 	inline const wchar_t* REGISTRY_SECTION_NAME = L"Registry";
+	inline const wchar_t* ADVANCED_SECTION_NAME = L"Advanced";
 
 	inline const wchar_t* DISPLAY_MODE_KEY_NAME = L"DISPLAY_MODE";
 	inline const wchar_t* VSYNC_KEY_NAME = L"VSYNC";
@@ -15,6 +16,8 @@ namespace Registry
 
 	inline const wchar_t* EXTERIOR_FOV_KEY_NAME = L"EXTERIOR_FOV";
 	inline const wchar_t* INTERIOR_FOV_KEY_NAME = L"INTERIOR_FOV";
+
+	inline const wchar_t* ENVMAP_SKY_KEY_NAME = L"ENVMAP_SKY";
 
 	void Init();
 
