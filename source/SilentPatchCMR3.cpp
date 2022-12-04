@@ -367,12 +367,6 @@ namespace Timers
 		Reset();
 	}
 
-	static DWORD WINAPI timeGetTime_NOP()
-	{
-		return 0;
-	}
-	static const auto pTimeGetTime_NOP = &timeGetTime_NOP;
-
 	static DWORD WINAPI timeGetTime_Reset()
 	{
 		Reset();
@@ -1752,18 +1746,8 @@ void OnInitializeHook()
 	{
 		using namespace Timers;
 
-		void* noop_gettime[] = {
-			get_pattern("74 1D FF 15", 4),
-			get_pattern("FF 15 ? ? ? ? 8B 0D ? ? ? ? 8B 15 ? ? ? ? 2B C1", 2)
-		};
-
 		auto gettime_reset = get_pattern("FF 15 ? ? ? ? 8B F8 8B D0 8B C8", 2);
 		auto gettime_update = get_pattern("FF 15 ? ? ? ? A3 ? ? ? ? E8 ? ? ? ? 83 F8 01 5D", 2);
-
-		for (void* addr : noop_gettime)
-		{
-			Patch(addr, &pTimeGetTime_NOP);
-		}
 
 		Patch(gettime_reset, &pTimeGetTime_Reset);
 		Patch(gettime_update, &pTimeGetTime_Update);
