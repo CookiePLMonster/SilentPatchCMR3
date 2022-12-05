@@ -43,7 +43,7 @@ const Graphics_Config& Graphics_GetCurrentConfig()
 
 float GetScaledResolutionWidth()
 {
-	return 480.0f * (static_cast<float>(GetResolutionWidth()) / GetResolutionHeight());
+	return 480.0f * (static_cast<float>(Graphics_GetScreenWidth()) / Graphics_GetScreenHeight());
 }
 
 void Core_Texture_SetFilteringMethod(D3DTexture* texture, uint32_t min, uint32_t mag, uint32_t mip)
@@ -91,7 +91,7 @@ OSD_Element* OSD_Element_Init(OSD_Element* element, int posX, int posY, int widt
 
 void Core_Blitter2D_Rect2D_G_Center(float* data, uint32_t numRectangles)
 {
-	const float resolutionWidth = static_cast<float>(GetResolutionWidth());
+	const float resolutionWidth = static_cast<float>(Graphics_GetScreenWidth());
 	const float scaledOldCenter = 320.0f * (resolutionWidth / GetScaledResolutionWidth());
 	const float scaledRealCenter = resolutionWidth / 2.0f;
 	const float offset = scaledRealCenter - scaledOldCenter;
@@ -107,7 +107,7 @@ void Core_Blitter2D_Rect2D_G_Center(float* data, uint32_t numRectangles)
 
 void Core_Blitter2D_Line2D_G_Center(float* data, uint32_t numLines)
 {
-	const float resolutionWidth = static_cast<float>(GetResolutionWidth());
+	const float resolutionWidth = static_cast<float>(Graphics_GetScreenWidth());
 	const float scaledOldCenter = 320.0f * (resolutionWidth / GetScaledResolutionWidth());
 	const float scaledRealCenter = resolutionWidth / 2.0f;
 	const float offset = scaledRealCenter - scaledOldCenter;
@@ -123,7 +123,7 @@ void Core_Blitter2D_Line2D_G_Center(float* data, uint32_t numLines)
 
 void Core_Blitter2D_Rect2D_GT_RightAlign(float* data, uint32_t numRectangles)
 {
-	const float resolutionWidth = static_cast<float>(GetResolutionWidth());
+	const float resolutionWidth = static_cast<float>(Graphics_GetScreenWidth());
 	const float scaledOldRight = 640.0f * (resolutionWidth / GetScaledResolutionWidth());
 	const float offset = resolutionWidth - scaledOldRight;
 	for (uint32_t i = 0; i < numRectangles; ++i)
@@ -156,6 +156,12 @@ void HandyFunction_Draw2DBox_RightAlign(int posX, int posY, int width, int heigh
 	HandyFunction_Draw2DBox(static_cast<int>(scaledWidth - offset), posY, width + 1, height, color);
 }
 
+void HandyFunction_Draw2DLineFromTo_Center(float x1, float y1, float x2, float y2, uint32_t* z, uint32_t color)
+{
+	const float scaledWidth = GetScaledResolutionWidth();
+	HandyFunction_Draw2DLineFromTo((scaledWidth / 2.0f) + x1 - 320.0f, y1, (scaledWidth / 2.0f) + x2 - 320.0f, y2, z, color);
+}
+
 void CMR3Font_BlitText_Center(uint8_t a1, const char* text, int posX, int posY, int a5, char a6)
 {
 	const float scaledWidth = GetScaledResolutionWidth();
@@ -186,8 +192,8 @@ uint32_t HandyFunction_AlphaCombineFlat(uint32_t color, uint32_t alpha)
 
 void Graphics_Viewports_SetAspectRatios()
 {
-	const float Width = static_cast<float>(GetResolutionWidth());
-	const float Height = static_cast<float>(GetResolutionHeight());
+	const float Width = static_cast<float>(Graphics_GetScreenWidth());
+	const float Height = static_cast<float>(Graphics_GetScreenHeight());
 	const float InvAR = Height / Width;
 	const float TargetAR = 4.0f / 3.0f;
 
@@ -240,8 +246,8 @@ void OSD_Main_SetUpStructsForWidescreen()
 static float gAspectRatioMult;
 void RecalculateUI()
 {
-	const int32_t ResWidth = GetResolutionWidth();
-	const int32_t ResHeight = GetResolutionHeight();
+	const int32_t ResWidth = Graphics_GetScreenWidth();
+	const int32_t ResHeight = Graphics_GetScreenHeight();
 
 	gAspectRatioMult = (4.0f * ResHeight) / (3.0f * ResWidth);
 
@@ -266,8 +272,9 @@ void RecalculateUI()
 	};
 
 	{
-		auto Protect = ScopedUnprotect::UnprotectSectionOrFullModule( GetModuleHandle( nullptr ), ".text" );
-		ScopedUnprotect::Section Protect2( GetModuleHandle( nullptr ), ".rdata" );
+		const HINSTANCE mainModuleInstance = GetModuleHandle(nullptr);
+		auto Protect = ScopedUnprotect::UnprotectSectionOrFullModule(mainModuleInstance, ".text");
+		ScopedUnprotect::Section Protect2(mainModuleInstance, ".rdata");
 	
 		*UI_resolutionWidthMult = gAspectRatioMult / 640.0f;
 		*UI_CoutdownPosXVertical[0] = *UI_CoutdownPosXVertical[1] = centeredHalf(146);
@@ -326,8 +333,8 @@ void Viewport_SetDimensions(D3DViewport* viewport, int left, int top, int right,
 		viewport = *gDefaultViewport;
 	}
 
-	const int32_t ResWidth = GetResolutionWidth();
-	const int32_t ResHeight = GetResolutionHeight();
+	const int32_t ResWidth = Graphics_GetScreenWidth();
+	const int32_t ResHeight = Graphics_GetScreenHeight();
 
 	viewport->m_left = left;
 	viewport->m_top = top;

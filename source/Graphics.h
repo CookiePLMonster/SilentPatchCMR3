@@ -249,14 +249,15 @@ OSD_Element* OSD_Element_Init_RightAlign(OSD_Element* element, int posX, int pos
 OSD_Element* OSD_Element_Init(OSD_Element* element, int posX, int posY, int width, int height, int a6, int a7, int a8, int a9, int a10, int a11);
 
 inline void (*Viewport_SetAspectRatio)(D3DViewport* viewport, float hfov, float vfov);
-inline uint32_t (*GetResolutionWidth)();
-inline uint32_t (*GetResolutionHeight)();
+inline uint32_t (*Graphics_GetScreenWidth)();
+inline uint32_t (*Graphics_GetScreenHeight)();
 
 inline void (*Core_Blitter2D_Rect2D_G)(float* data, uint32_t numRectangles);
 inline void (*Core_Blitter2D_Rect2D_GT)(float* data, uint32_t numRectangles);
 inline void (*Core_Blitter2D_Line2D_G)(float* data, uint32_t numLines);
 
 inline void (*HandyFunction_Draw2DBox)(int posX, int posY, int width, int height, int color);
+inline void (*HandyFunction_Draw2DLineFromTo)(float x1, float y1, float x2, float y2, uint32_t* z, uint32_t color);
 inline void (*CMR3Font_BlitText)(uint8_t fontID, const char* text, int posX, int posY, int a5, char a6);
 inline int (*CMR3Font_GetTextWidth)(uint8_t fontID, const char* text);
 
@@ -281,7 +282,7 @@ uint32_t CMR_GetAnisotropicLevel();
 
 inline const MenuResolutionEntry* (*GetMenuResolutionEntry)(int32_t, int32_t);
 
-inline int32_t (*GetNumPlayers)();
+//inline int32_t (*GetNumPlayers)();
 
 inline Graphics_Config* gGraphicsConfig;
 const Graphics_Config& Graphics_GetCurrentConfig();
@@ -300,6 +301,8 @@ void Core_Blitter2D_Rect2D_GT_RightAlign(float* data, uint32_t numRectangles);
 void HandyFunction_Draw2DBox_Stretch(int posX, int posY, int width, int height, int color);
 void HandyFunction_Draw2DBox_Center(int posX, int posY, int width, int height, int color);
 void HandyFunction_Draw2DBox_RightAlign(int posX, int posY, int width, int height, int color);
+void HandyFunction_Draw2DLineFromTo_Center(float x1, float y1, float x2, float y2, uint32_t* z, uint32_t color);
+
 void CMR3Font_BlitText_Center(uint8_t a1, const char* text, int posX, int posY, int a5, char a6);
 void CMR3Font_BlitText_RightAlign(uint8_t a1, const char* text, int posX, int posY, int a5, char a6);
 

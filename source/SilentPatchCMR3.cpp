@@ -36,6 +36,14 @@
 static int DesktopWidth, DesktopHeight;
 static HICON SmallIcon;
 
+template<typename AT>
+HMODULE GetModuleHandleFromAddress(AT address)
+{
+	HMODULE result = nullptr;
+	GetModuleHandleEx(GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT|GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, reinterpret_cast<LPCTSTR>(address), &result);
+	return result;
+}
+
 namespace Localization
 {
 	uint32_t (*orgGetLanguageIDByCode)(char code);
@@ -507,7 +515,7 @@ namespace HalfPixel
 		const float c1 = (XMVectorGetX(XMVector3Dot(ppcam0, column0)) + proj.m[3][0]) * l1;
 		const float l2 = 1.0f / (XMVectorGetX(XMVector3Dot(ppcam1, column3)) + proj.m[3][3]);
 		const float c2 = (XMVectorGetX(XMVector3Dot(ppcam1, column0)) + proj.m[3][0]) * l2;
-		return 1.0f / ((c2 - c1) * GetResolutionWidth());
+		return 1.0f / ((c2 - c1) * Graphics_GetScreenWidth());
 	}
 
 	// This and the above functions have been adapted for the game from "Textured Lines In D3D" by Pierre Terdiman
@@ -635,7 +643,7 @@ namespace HalfPixel
 			using namespace DirectX;
 
 			const XMMATRIX identityMatrix = XMMatrixIdentity();
-			const float targetThickness = GetResolutionHeight() / 480.0f;
+			const float targetThickness = Graphics_GetScreenHeight() / 480.0f;
 
 			BlitTri2D_G* tris = reinterpret_cast<BlitTri2D_G*>(buf);
 			BlitTri2D_G* currentTri = tris;
@@ -700,7 +708,7 @@ namespace HalfPixel
 			const XMMATRIX viewMatrix = XMLoadFloat4x4(reinterpret_cast<XMFLOAT4X4*>(pViewMatrix));
 			const XMMATRIX invViewMatrix = XMMatrixInverse(nullptr, viewMatrix);
 
-			const float targetThickness = GetResolutionHeight() / 480.0f;
+			const float targetThickness = Graphics_GetScreenHeight() / 480.0f;
 
 			BlitTri3D_G* tris = reinterpret_cast<BlitTri3D_G*>(buf);
 			BlitTri3D_G* currentTri = tris;
@@ -803,22 +811,30 @@ namespace ConstantViewports
 	}
 }
 
+void CMR3Font_BlitText_CalibrateAxisName(uint8_t a1, const char* text, int /*posX*/, int posY, int a5, char /*a6*/)
+{
+	CMR3Font_BlitText_Center(a1, text, 140, posY + 10, a5, 0x14);
+}
+
 namespace ScaledTexturesSupport
 {
-	template<std::size_t Index>
-	D3DTexture* (*orgCreateTexture_Misc_Scaled)(void* a1, const char* name, int a3, int a4, int a5);
-
-	template<std::size_t Index>
-	D3DTexture* CreateTexture_Misc_Scaled(void* a1, const char* name, int a3, int a4, int a5)
+	D3DTexture* CreateTexture_Misc_Scaled_Internal(D3DTexture* result, const char* name)
 	{
-		D3DTexture* result = orgCreateTexture_Misc_Scaled<Index>(a1, name, a3, a4, a5);
 		if (result != nullptr && name != nullptr)
 		{
-			static const std::map<std::string_view, std::pair<uint32_t, uint32_t>, std::less<>> textureDimensions = {
+			struct TexData
+			{
+				uint32_t width, height;
+				bool useNearest = false;
+			};
+
+			static const std::map<std::string_view, TexData, std::less<>> textureDimensions = {
 				{ "Arrow1Player", { 32, 16 } },
 				{ "ArrowMultiPlayer", { 32, 16 } },
 				{ "ArrowSmall", { 16, 16 } },
+				{ "Base", { 128, 128, true } },
 				{ "certina", { 64, 8 } },
+				{ "Colour", { 128, 128, true } },
 				{ "Ck_base", { 128, 64 } },
 				{ "Ck_00", { 32, 32 } },
 				{ "Ck_01", { 32, 32 } },
@@ -827,6 +843,7 @@ namespace ScaledTexturesSupport
 				{ "Ck_04", { 32, 32 } },
 				{ "Ck_05", { 32, 32 } },
 				{ "colin3_2", { 256, 64 } },
+				{ "ct_3", { 64, 64, true } },
 				{ "dialcntr", { 32, 32 } },
 				{ "infobox", { 128, 128 } },
 				{ "MiniStageBanner", { 128, 32 } },
@@ -837,11 +854,26 @@ namespace ScaledTexturesSupport
 			auto it = textureDimensions.find(name);
 			if (it != textureDimensions.end())
 			{
-				result->m_width = it->second.first;
-				result->m_height = it->second.second;
+				result->m_width = it->second.width;
+				result->m_height = it->second.height;
+
+				if (it->second.useNearest)
+				{
+					Core_Texture_SetFilteringMethod(result, D3DTEXF_POINT, D3DTEXF_POINT, D3DTEXF_POINT);
+				}
 			}
 		}
 		return result;
+	}
+
+	template<std::size_t Index>
+	D3DTexture* (*orgCreateTexture_Misc_Scaled)(void* a1, const char* name, int a3, int a4, int a5);
+
+	template<std::size_t Index>
+	D3DTexture* CreateTexture_Misc_Scaled(void* a1, const char* name, int a3, int a4, int a5)
+	{
+		D3DTexture* result = orgCreateTexture_Misc_Scaled<Index>(a1, name, a3, a4, a5);
+		return CreateTexture_Misc_Scaled_Internal(result, name);
 	}
 
 	template<std::size_t Ctr, typename Tuple, std::size_t... I, typename Func>
@@ -855,24 +887,6 @@ namespace ScaledTexturesSupport
 	{
 		auto tuple = std::tuple_cat(std::forward<Vars>(vars));
 		HookEachImpl_Misc_Scaled<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
-	}
-
-	static D3DTexture* (*orgCreateTexture_Misc_NearestFilter)(void* a1, const char* name, int a3, int a4, int a5);
-	D3DTexture* CreateTexture_Misc_NearestFilter(void* a1, const char* name, int a3, int a4, int a5)
-	{
-		D3DTexture* result = orgCreateTexture_Misc_NearestFilter(a1, name, a3, a4, a5);
-		if (result != nullptr && name != nullptr)
-		{
-			static constexpr std::string_view nearestFilteredTextures[] = {
-				"ct_3"
-			};
-			auto it = std::find(std::begin(nearestFilteredTextures), std::end(nearestFilteredTextures), name);
-			if (it != std::end(nearestFilteredTextures))
-			{
-				Core_Texture_SetFilteringMethod(result, D3DTEXF_POINT, D3DTEXF_POINT, D3DTEXF_POINT);
-			}
-		}
-		return result;
 	}
 
 	static D3DTexture* (*orgCreateTexture_Font)(void* a1, const char* name, int a3, int a4, int a5);
@@ -1386,7 +1400,9 @@ void OnInitializeHook()
 	DesktopWidth = GetSystemMetrics(SM_CXSCREEN);
 	DesktopHeight = GetSystemMetrics(SM_CYSCREEN);
 
-	auto Protect = ScopedUnprotect::UnprotectSectionOrFullModule( GetModuleHandle( nullptr ), ".text" );
+	const HINSTANCE mainModuleInstance = GetModuleHandle(nullptr);
+
+	auto Protect = ScopedUnprotect::UnprotectSectionOrFullModule(mainModuleInstance, ".text");
 
 	auto InterceptCall = [](void* addr, auto&& func, auto&& hook)
 	{
@@ -1482,10 +1498,16 @@ void OnInitializeHook()
 		auto save_func = pattern("E8 ? ? ? ? 8B 0D ? ? ? ? 6A FF 51 8B F8 E8").get_one();
 		auto get_modes = pattern("E8 ? ? ? ? 33 F6 85 C0 89 44 24 14").get_one();
 
+		auto get_screen_width = ReadCallFrom(get_pattern("E8 ? ? ? ? 33 F6 89 44 24 28"));
+		auto get_screen_height = ReadCallFrom(get_pattern("E8 ? ? ? ? 8D 4C 6D 00"));
+
 		Graphics_SetGammaRamp = reinterpret_cast<decltype(Graphics_SetGammaRamp)>(set_gamma_ramp);
 		Graphics_GetNumAdapters = reinterpret_cast<decltype(Graphics_GetNumAdapters)>(get_num_adapters);
 		Graphics_CheckForVertexShaders = reinterpret_cast<decltype(Graphics_CheckForVertexShaders)>(check_for_vertex_shaders);
 		Graphics_GetAdapterCaps = reinterpret_cast<decltype(Graphics_GetAdapterCaps)>(get_adapter_caps);
+
+		Graphics_GetScreenWidth = reinterpret_cast<decltype(Graphics_GetScreenWidth)>(get_screen_width);
+		Graphics_GetScreenHeight = reinterpret_cast<decltype(Graphics_GetScreenHeight)>(get_screen_height);
 
 		CMR_GetAdapterProductID = reinterpret_cast<decltype(CMR_GetAdapterProductID)>(ReadCallFrom(save_func.get<void>(0)));
 		CMR_GetAdapterVendorID = reinterpret_cast<decltype(CMR_GetAdapterVendorID)>(ReadCallFrom(save_func.get<void>(0x10)));
@@ -1499,6 +1521,18 @@ void OnInitializeHook()
 		gGraphicsConfig = *reinterpret_cast<Graphics_Config**>(get_current_config + 0xC);
 
 		HasGraphics = true;
+	}
+	TXN_CATCH();
+
+	bool HasHandyFunction = false;
+	try
+	{
+		auto draw_2d_box = get_pattern("6A 01 E8 ? ? ? ? 6A 05 E8 ? ? ? ? 6A 06 E8 ? ? ? ? DB 44 24 5C", -5);
+		auto draw_2d_line_from_to = get_pattern("8B 54 24 54 89 44 24 10", -0xB);
+
+		HandyFunction_Draw2DBox = reinterpret_cast<decltype(HandyFunction_Draw2DBox)>(draw_2d_box);
+		HandyFunction_Draw2DLineFromTo = reinterpret_cast<decltype(HandyFunction_Draw2DLineFromTo)>(draw_2d_line_from_to);
+		HasHandyFunction = true;
 	}
 	TXN_CATCH();
 
@@ -1522,36 +1556,31 @@ void OnInitializeHook()
 	{
 		using namespace ScaledTexturesSupport;
 
-		std::array<void*, 2> load_texture = {
+		std::array<void*, 3> load_texture = {
 			get_pattern("E8 ? ? ? ? 89 06 5E C2 0C 00"),
 			get_pattern("E8 ? ? ? ? 56 89 07"),
+			[]
+			{
+				try
+				{
+					// Polish/EFIGS
+					return get_pattern("E8 ? ? ? ? 89 07 5F");
+				}
+				catch (const hook::txn_exception&)
+				{
+					// Czech
+					return get_pattern("E8 ? ? ? ? 89 45 00 5D");
+				}
+			}()
 		};
 		auto load_font = pattern("57 E8 ? ? ? ? 8B 0D ? ? ? ? 6A 01").get_one();
 
-		auto load_cube_texture = []
-		{
-			try
-			{
-				// Polish/EFIGS
-				return get_pattern("E8 ? ? ? ? 89 07 5F");
-			}
-			catch (const hook::txn_exception&)
-			{
-				// Czech
-				return get_pattern("E8 ? ? ? ? 89 45 00 5D");
-			}
-		}();
-
 		HookEach_Misc_Scaled(load_texture, InterceptCall);
 
-		ReadCall(load_font.get<void>(1), orgCreateTexture_Font);
-		InjectHook(load_font.get<void>(1), CreateTexture_Font_Scaled);
+		InterceptCall(load_font.get<void>(1), orgCreateTexture_Font, CreateTexture_Font_Scaled);
 
 		// NOP Core::Texture_SetFilteringMethod for fonts as we handle it in the above function now
 		InjectHook(load_font.get<void>(0x1F), Texture_SetFilteringMethod_NOP);
-
-		ReadCall(load_cube_texture, orgCreateTexture_Misc_NearestFilter);
-		InjectHook(load_cube_texture, CreateTexture_Misc_NearestFilter);
 	}
 	TXN_CATCH();
 
@@ -1821,7 +1850,8 @@ void OnInitializeHook()
 
 
 	// Fixed half pixel issues, and added line thickness
-	try
+	// Requires patches: Graphics (for resolution)
+	if (HasGraphics) try
 	{
 		using namespace HalfPixel;
 
@@ -1861,15 +1891,11 @@ void OnInitializeHook()
 
 
 	// Better widescreen support
-	try
+	// Requires: Graphics
+	if (HasGraphics) try
 	{
-		auto get_resolution_width = ReadCallFrom(get_pattern("E8 ? ? ? ? 33 F6 89 44 24 28"));
-		auto get_resolution_height = ReadCallFrom(get_pattern("E8 ? ? ? ? 8D 4C 6D 00"));
-		auto get_num_players = ReadCallFrom(get_pattern("E8 ? ? ? ? 88 44 24 23"));
-
-		GetResolutionWidth = reinterpret_cast<decltype(GetResolutionWidth)>(get_resolution_width);
-		GetResolutionHeight = reinterpret_cast<decltype(GetResolutionHeight)>(get_resolution_height);
-		GetNumPlayers = reinterpret_cast<decltype(GetNumPlayers)>(get_num_players);
+		//auto get_num_players = ReadCallFrom(get_pattern("E8 ? ? ? ? 88 44 24 23"));
+		//GetNumPlayers = reinterpret_cast<decltype(GetNumPlayers)>(get_num_players);
 		gDefaultViewport = *get_pattern<D3DViewport**>("A1 ? ? ? ? D9 44 24 08 D9 58 1C", 1);
 
 		// Viewports
@@ -1915,13 +1941,11 @@ void OnInitializeHook()
 		TXN_CATCH();
 
 		// UI
-		if (HasCMR3Font) try
+		if (HasCMR3Font && HasHandyFunction) try
 		{
 			using namespace Graphics::Patches;
 
 			extern void (*orgSetMovieDirectory)(const char* path);
-
-			HandyFunction_Draw2DBox = reinterpret_cast<decltype(HandyFunction_Draw2DBox)>(get_pattern("6A 01 E8 ? ? ? ? 6A 05 E8 ? ? ? ? 6A 06 E8 ? ? ? ? DB 44 24 5C", -5));
 
 			Keyboard_DrawTextEntryBox = reinterpret_cast<decltype(Keyboard_DrawTextEntryBox)>(get_pattern("56 3B C3 57 0F 84 ? ? ? ? DB 84 24", -0xD));
 
@@ -1973,7 +1997,11 @@ void OnInitializeHook()
 				});
 			};
 
-			UI_resolutionWidthMult = *get_pattern<float*>("DF 6C 24 18 D8 0D ? ? ? ? D9 5C 24 38", 4+2);
+			float* resolutionWidthMult = *get_pattern<float*>("DF 6C 24 18 D8 0D ? ? ? ? D9 5C 24 38", 4+2);
+			if (mainModuleInstance == GetModuleHandleFromAddress(resolutionWidthMult))
+			{
+				UI_resolutionWidthMult = resolutionWidthMult;
+			}
 			UI_RightAlignElements.emplace_back(std::in_place_type<FloatPatch>, *get_pattern<float*>("D8 3D ? ? ? ? D9 5C 24 18", 2), 640.0f);
 
 			UI_RightAlignElements.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("B9 ? ? ? ? D9 5C 24 0C", 1), 640);
@@ -2171,6 +2199,16 @@ void OnInitializeHook()
 			};
 
 			patch_field_center("BA ? ? ? ? D1 F8", 1);
+
+			// Controller calibration screen
+			void* controller_calibrate_centered_texts[] = {
+				get_pattern("C6 01 00 E8 ? ? ? ? A1", 3),
+			};
+			auto controller_calibrate_right_align_text = get_pattern("6A 00 E8 ? ? ? ? 8B 84 24 ? ? ? ? 85 C0 74 12 85 FF", 2);
+			auto controller_calibrate_centered_box = get_pattern("E8 ? ? ? ? 8D 4C 24 2C 8B 44 24 24");
+
+			auto controller_calibrate_centered_line1 = pattern("56 50 57 50 E8").count(2);
+			auto controller_calibrate_centered_line2 = pattern("8B 44 24 1C 50 57 50 E8").count(4);
 
 			// Movie rendering
 			auto movie_rect = pattern("C7 05 ? ? ? ? 00 00 00 BF C7 05 ? ? ? ? 00 00 00 BF").get_one();
@@ -2389,6 +2427,20 @@ void OnInitializeHook()
 			{
 				InjectHook(addr, CMR3Font_BlitText_Center);
 			}
+			for (void* addr : controller_calibrate_centered_texts)
+			{
+				InjectHook(addr, CMR3Font_BlitText_Center);
+			}
+			InjectHook(controller_calibrate_right_align_text, CMR3Font_BlitText_CalibrateAxisName);
+			InjectHook(controller_calibrate_centered_box, HandyFunction_Draw2DBox_Center);
+			controller_calibrate_centered_line1.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(4), HandyFunction_Draw2DLineFromTo_Center);
+			});
+			controller_calibrate_centered_line2.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(7), HandyFunction_Draw2DLineFromTo_Center);
+			});
 			
 			ReadCall(movie_name_setdir, orgSetMovieDirectory);
 			InjectHook(movie_name_setdir, SetMovieDirectory_SetDimensions);
@@ -2481,7 +2533,10 @@ void OnInitializeHook()
 		};
 
 		// Patch the string directly, whatevz
-		strcpy_s(wrong_format_string, 6, "%s: ");
+		if (mainModuleInstance == GetModuleHandleFromAddress(wrong_format_string))
+		{
+			strcpy_s(wrong_format_string, 6, "%s: ");
+		}
 
 		InterceptCall(uppercase_controller_name, orgGetControllerName, GetControllerName_Uppercase);
 
