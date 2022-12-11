@@ -89,7 +89,7 @@ OSD_Element* OSD_Element_Init(OSD_Element* element, int posX, int posY, int widt
 	return element;
 }
 
-void Core_Blitter2D_Rect2D_G_Center(float* data, uint32_t numRectangles)
+void Core_Blitter2D_Rect2D_G_Center(BlitRect2D_G* rects, uint32_t numRectangles)
 {
 	const float resolutionWidth = static_cast<float>(Graphics_GetScreenWidth());
 	const float scaledOldCenter = 320.0f * (resolutionWidth / GetScaledResolutionWidth());
@@ -98,14 +98,13 @@ void Core_Blitter2D_Rect2D_G_Center(float* data, uint32_t numRectangles)
 	for (uint32_t i = 0; i < numRectangles; ++i)
 	{
 		// Those rectangles are already multiplied for resolution
-		float* rect = &data[9 * i];
-		rect[4] += offset;
-		rect[5] += offset;
+		rects[i].X[0] += offset;
+		rects[i].X[1] += offset;
 	}
-	Core_Blitter2D_Rect2D_G(data, numRectangles);
+	Core_Blitter2D_Rect2D_G(rects, numRectangles);
 }
 
-void Core_Blitter2D_Line2D_G_Center(float* data, uint32_t numLines)
+void Core_Blitter2D_Line2D_G_Center(BlitLine2D_G* lines, uint32_t numLines)
 {
 	const float resolutionWidth = static_cast<float>(Graphics_GetScreenWidth());
 	const float scaledOldCenter = 320.0f * (resolutionWidth / GetScaledResolutionWidth());
@@ -114,11 +113,10 @@ void Core_Blitter2D_Line2D_G_Center(float* data, uint32_t numLines)
 	for (uint32_t i = 0; i < numLines; ++i)
 	{
 		// Those rectangles are already multiplied for resolution
-		float* rect = &data[8 * i];
-		rect[2] += offset;
-		rect[3] += offset;
+		lines[i].X[0] += offset;
+		lines[i].X[1] += offset;
 	}
-	Core_Blitter2D_Line2D_G(data, numLines);
+	Core_Blitter2D_Line2D_G(lines, numLines);
 }
 
 void Core_Blitter2D_Rect2D_GT_RightAlign(float* data, uint32_t numRectangles)

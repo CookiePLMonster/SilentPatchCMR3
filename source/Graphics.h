@@ -241,6 +241,14 @@ struct BlitQuad2D_GT
 };
 static_assert(sizeof(BlitQuad2D_GT) == 84, "Wrong size: BlitQuad2D_GT");
 
+struct BlitRect2D_G
+{
+	uint32_t color[4];
+	float X[2];
+	float Y[2];
+	float Z;
+};
+static_assert(sizeof(BlitRect2D_G) == 36, "Wrong size: BlitRect2D_G");
 
 void Core_Texture_SetFilteringMethod(D3DTexture* texture, uint32_t min, uint32_t mag, uint32_t mip);
 
@@ -252,9 +260,9 @@ inline void (*Viewport_SetAspectRatio)(D3DViewport* viewport, float hfov, float 
 inline uint32_t (*Graphics_GetScreenWidth)();
 inline uint32_t (*Graphics_GetScreenHeight)();
 
-inline void (*Core_Blitter2D_Rect2D_G)(float* data, uint32_t numRectangles);
-inline void (*Core_Blitter2D_Rect2D_GT)(float* data, uint32_t numRectangles);
-inline void (*Core_Blitter2D_Line2D_G)(float* data, uint32_t numLines);
+inline void (*Core_Blitter2D_Rect2D_G)(BlitRect2D_G* rects, uint32_t numRectangles);
+inline void (*Core_Blitter2D_Rect2D_GT)(float* rects, uint32_t numRectangles);
+inline void (*Core_Blitter2D_Line2D_G)(BlitLine2D_G* lines, uint32_t numLines);
 
 inline void (*HandyFunction_Draw2DBox)(int posX, int posY, int width, int height, int color);
 inline void (*HandyFunction_Draw2DLineFromTo)(float x1, float y1, float x2, float y2, uint32_t* z, uint32_t color);
@@ -294,8 +302,8 @@ inline D3DPRESENT_PARAMETERS* gd3dPP;
 
 float GetScaledResolutionWidth();
 
-void Core_Blitter2D_Rect2D_G_Center(float* data, uint32_t numRectangles);
-void Core_Blitter2D_Line2D_G_Center(float* data, uint32_t numLines);
+void Core_Blitter2D_Rect2D_G_Center(BlitRect2D_G* rects, uint32_t numRectangles);
+void Core_Blitter2D_Line2D_G_Center(BlitLine2D_G* lines, uint32_t numLines);
 void Core_Blitter2D_Rect2D_GT_RightAlign(float* data, uint32_t numRectangles);
 
 void HandyFunction_Draw2DBox_Stretch(int posX, int posY, int width, int height, int color);

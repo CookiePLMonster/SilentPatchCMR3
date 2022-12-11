@@ -650,8 +650,8 @@ namespace HalfPixel
 			for (uint32_t i = 0; i < numLines; i++)
 			{
 				XMVECTOR quad[4];
-				ComputeScreenQuad(identityMatrix, identityMatrix, nullptr, quad, XMVectorSet(lines[i].X[0], lines[i].Y[0], 0.0f, 1.0f),
-													XMVectorSet(lines[i].X[1], lines[i].Y[1], 0.0f, 1.0f), targetThickness);
+				ComputeScreenQuad(identityMatrix, identityMatrix, nullptr, quad, XMVectorSet(std::floor(lines[i].X[0]), std::floor(lines[i].Y[0]), 0.0f, 1.0f),
+													XMVectorSet(std::floor(lines[i].X[1]), std::floor(lines[i].Y[1]), 0.0f, 1.0f), targetThickness);
 
 				// Make triangles from quad
 				currentTri->X[0] = OffsetTexel(XMVectorGetX(quad[1]));
@@ -735,6 +735,207 @@ namespace HalfPixel
 			Core_Blitter3D_Tri3D_G(tris, 2 * numLines);
 		}
 		_freea(buf);
+	}
+}
+
+namespace BetterBoxDrawing
+{
+	void DisplaySelectionBox(int posX, int posY, int width, int height, unsigned int alpha, int fill)
+	{
+		static constexpr uint32_t BOX_COLOR = 0xDCDCDC;
+
+		const float Scale = GetScaledResolutionWidth();
+		const float ScaleX = Graphics_GetScreenWidth() / Scale;
+		const float ScaleY = Graphics_GetScreenHeight() / 480.0f;
+
+		// The original game used lines, but we use rects for nice and tidy line thickness
+		const float LineThickness = std::max(1.0f, std::floor(ScaleX));
+		const float HalfLineThickness = LineThickness / 2.0f;
+
+		BlitRect2D_G rects[5];
+		{
+			const uint32_t color = (alpha << 24) | BOX_COLOR;
+			for (auto it = rects; it != rects+4; ++it)
+			{
+				std::fill(std::begin(it->color), std::end(it->color), color);
+				it->Z = 0.0f;
+			}
+		}
+
+		uint32_t rectsToDraw = 0;
+		{
+			BlitRect2D_G& top = rects[rectsToDraw++];
+			top.X[0] = (posX * ScaleX) - HalfLineThickness;
+			top.X[1] = ((posX + width) * ScaleX) + HalfLineThickness;
+			top.Y[0] = (posY * ScaleY) - HalfLineThickness;
+			top.Y[1] = (posY * ScaleY) + HalfLineThickness;
+		}
+		{
+			BlitRect2D_G& right = rects[rectsToDraw++];
+			right.X[0] = ((posX + width) * ScaleX) - HalfLineThickness;
+			right.X[1] = ((posX + width) * ScaleX) + HalfLineThickness;
+			right.Y[0] = (posY * ScaleY) + HalfLineThickness;
+			right.Y[1] = ((posY + height) * ScaleY) - HalfLineThickness;
+		}
+		{
+			BlitRect2D_G& bottom = rects[rectsToDraw++];
+			bottom.X[0] = (posX * ScaleX) - HalfLineThickness;
+			bottom.X[1] = ((posX + width) * ScaleX) + HalfLineThickness;
+			bottom.Y[0] = ((posY + height) * ScaleY) - HalfLineThickness;
+			bottom.Y[1] = ((posY + height) * ScaleY) + HalfLineThickness;
+		}
+		{
+			BlitRect2D_G& left = rects[rectsToDraw++];
+			left.X[0] = (posX * ScaleX) - HalfLineThickness;
+			left.X[1] = (posX * ScaleX) + HalfLineThickness;
+			left.Y[0] = (posY * ScaleY) + HalfLineThickness;
+			left.Y[1] = ((posY + height) * ScaleY) - HalfLineThickness;
+		}
+
+		if (fill != 0)
+		{
+			const uint32_t color = ((alpha / 2) << 24) | BOX_COLOR;
+
+			BlitRect2D_G& rect = rects[rectsToDraw++];
+			rect.Z = 0.0f;
+			std::fill(std::begin(rect.color), std::end(rect.color), color);
+
+			rect.X[0] = (posX * ScaleX) + HalfLineThickness;
+			rect.X[1] = ((posX + width) * ScaleX) - HalfLineThickness;
+
+			rect.Y[0] = (posY * ScaleY) + HalfLineThickness;
+			rect.Y[1] = ((posY + height) * ScaleY) - HalfLineThickness;
+		}
+
+		Core_Blitter2D_Rect2D_G(rects, rectsToDraw);
+	}
+
+	void Keyboard_DrawTextEntryBox(int posX, int posY, int width, int height, unsigned int color, int fill)
+	{
+		const float Scale = GetScaledResolutionWidth();
+		const float ScaleX = Graphics_GetScreenWidth() / Scale;
+		const float ScaleY = Graphics_GetScreenHeight() / 480.0f;
+
+		// The original game used lines, but we use rects for nice and tidy line thickness
+		const float LineThickness = std::max(1.0f, std::floor(ScaleX));
+		const float HalfLineThickness = LineThickness / 2.0f;
+
+		if (fill != 0)
+		{
+			BlitRect2D_G rect;
+			rect.Z = 0.0f;
+			std::fill(std::begin(rect.color), std::end(rect.color), color);
+
+			rect.X[0] = (posX * ScaleX) - HalfLineThickness;
+			rect.X[1] = ((posX + width) * ScaleX) + HalfLineThickness;
+			
+			rect.Y[0] = (posY * ScaleY) - HalfLineThickness;
+			rect.Y[1] = ((posY + height) * ScaleY) + HalfLineThickness;
+			Core_Blitter2D_Rect2D_G(&rect, 1);
+			return;
+		}
+
+		BlitRect2D_G rects[4];
+		for (BlitRect2D_G& rect : rects)
+		{
+			std::fill(std::begin(rect.color), std::end(rect.color), color);
+			rect.Z = 0.0f;
+		}
+
+		{
+			BlitRect2D_G& top = rects[0];
+			top.X[0] = (posX * ScaleX) - HalfLineThickness;
+			top.X[1] = ((posX + width) * ScaleX) + HalfLineThickness;
+			top.Y[0] = (posY * ScaleY) - HalfLineThickness;
+			top.Y[1] = (posY * ScaleY) + HalfLineThickness;
+		}
+		{
+			BlitRect2D_G& right = rects[1];
+			right.X[0] = ((posX + width) * ScaleX) - HalfLineThickness;
+			right.X[1] = ((posX + width) * ScaleX) + HalfLineThickness;
+			right.Y[0] = (posY * ScaleY) + HalfLineThickness;
+			right.Y[1] = ((posY + height) * ScaleY) - HalfLineThickness;
+		}
+		{
+			BlitRect2D_G& bottom = rects[2];
+			bottom.X[0] = (posX * ScaleX) - HalfLineThickness;
+			bottom.X[1] = ((posX + width) * ScaleX) + HalfLineThickness;
+			bottom.Y[0] = ((posY + height) * ScaleY) - HalfLineThickness;
+			bottom.Y[1] = ((posY + height) * ScaleY) + HalfLineThickness;
+		}
+		{
+			BlitRect2D_G& left = rects[3];
+			left.X[0] = (posX * ScaleX) - HalfLineThickness;
+			left.X[1] = (posX * ScaleX) + HalfLineThickness;
+			left.Y[0] = (posY * ScaleY) + HalfLineThickness;
+			left.Y[1] = ((posY + height) * ScaleY) - HalfLineThickness;
+		}
+
+		Core_Blitter2D_Rect2D_G(rects, std::size(rects));
+	}
+
+	void DrawCountdownOutline(float X1, float Y1, float X2, float Y2, unsigned int color)
+	{
+		const float Scale = GetScaledResolutionWidth();
+		const float ScaleX = Graphics_GetScreenWidth() / Scale;
+
+		// The original game used lines, but we use rects for nice and tidy line thickness
+		const float LineThickness = std::max(1.0f, std::floor(ScaleX));
+		const float HalfLineThickness = LineThickness / 2.0f;
+
+		BlitRect2D_G rects[4];
+		for (BlitRect2D_G& rect : rects)
+		{
+			std::fill(std::begin(rect.color), std::end(rect.color), color);
+			rect.Z = 0.0f;
+		}
+
+		{
+			BlitRect2D_G& top = rects[0];
+			top.X[0] = X1 - HalfLineThickness;
+			top.X[1] = X2 + HalfLineThickness;
+			top.Y[0] = Y1 - HalfLineThickness;
+			top.Y[1] = Y1 + HalfLineThickness;
+		}
+		{
+			BlitRect2D_G& right = rects[1];
+			right.X[0] = X2 - HalfLineThickness;
+			right.X[1] = X2 + HalfLineThickness;
+			right.Y[0] = Y1 + HalfLineThickness;
+			right.Y[1] = Y2 - HalfLineThickness;
+		}
+		{
+			BlitRect2D_G& bottom = rects[2];
+			bottom.X[0] = X1 - HalfLineThickness;
+			bottom.X[1] = X2 + HalfLineThickness;
+			bottom.Y[0] = Y2 - HalfLineThickness;
+			bottom.Y[1] = Y2 + HalfLineThickness;
+		}
+		{
+			BlitRect2D_G& left = rects[3];
+			left.X[0] = X1 - HalfLineThickness;
+			left.X[1] = X1 + HalfLineThickness;
+			left.Y[0] = Y1 + HalfLineThickness;
+			left.Y[1] = Y2 - HalfLineThickness;
+		}
+
+		Core_Blitter2D_Rect2D_G(rects, std::size(rects));
+	}
+
+	static thread_local float SavedPosY;
+	void Blitter2D_Line2D_G_FirstLine(BlitLine2D_G* lines, uint32_t /*numLines*/)
+	{
+		SavedPosY = lines->Y[0];
+	}
+
+	void Blitter2D_Line2D_G_SecondLine(BlitLine2D_G* lines, uint32_t /*numLines*/)
+	{
+		DrawCountdownOutline(lines->X[0], SavedPosY, lines->X[1], lines->Y[1], lines->color[0]);
+	}
+
+	void Blitter2D_Line2D_G_NOP(BlitLine2D_G* /*lines*/, uint32_t /*numLines*/)
+	{
+	
 	}
 }
 
@@ -1536,6 +1737,21 @@ void OnInitializeHook()
 	}
 	TXN_CATCH();
 
+	bool HasBlitter2D = false;
+	try
+	{
+		auto blitter2d_rect2d_g = ReadCallFrom(get_pattern("E8 ? ? ? ? 8D 44 24 68"));
+		auto blitter2d_rect2d_gt = ReadCallFrom(get_pattern("DD D8 E8 ? ? ? ? 8B 7C 24 30", 2));
+		auto blitter2d_line2d_g = get_pattern("F7 D8 57", -0x14);
+
+		Core_Blitter2D_Rect2D_G = reinterpret_cast<decltype(Core_Blitter2D_Rect2D_G)>(blitter2d_rect2d_g);
+		Core_Blitter2D_Rect2D_GT = reinterpret_cast<decltype(Core_Blitter2D_Rect2D_GT)>(blitter2d_rect2d_gt);
+		Core_Blitter2D_Line2D_G = reinterpret_cast<decltype(Core_Blitter2D_Line2D_G)>(blitter2d_line2d_g);
+
+		HasBlitter2D = true;
+	}
+	TXN_CATCH();
+
 	bool HasRenderState = false;
 	try
 	{
@@ -1548,6 +1764,16 @@ void OnInitializeHook()
 		RenderStateFacade::OFFS_maxAnisotropy = MaxAnisotropy - RenderStateStart;
 
 		HasRenderState = true;
+	}
+	TXN_CATCH();
+
+	bool HasKeyboard = false;
+	try
+	{
+		auto draw_text_entry_box = get_pattern("56 3B C3 57 0F 84 ? ? ? ? DB 84 24", -0xD);
+
+		Keyboard_DrawTextEntryBox = reinterpret_cast<decltype(Keyboard_DrawTextEntryBox)>(draw_text_entry_box);
+		HasKeyboard = true;
 	}
 	TXN_CATCH();
 
@@ -1890,6 +2116,46 @@ void OnInitializeHook()
 	TXN_CATCH();
 
 
+	// Better line box drawing (without gaps and overlapping lines)
+	if (HasBlitter2D && HasGraphics) try
+	{
+		using namespace BetterBoxDrawing;
+
+		auto display_selection_box = get_pattern("81 E1 FF 00 00 00 99", -0xC);
+		int32_t* car_setup_selection_box_posy = get_pattern<int32_t>("B9 ? ? ? ? 89 4C 24 1C", 1);
+		int8_t* car_setup_selection_box_height = get_pattern<int8_t>("6A 08 6A 09", 1);
+
+		auto osd_countdown_draw = pattern("D8 C9 D9 5C 24 3C DD D8 E8").count(4);
+		auto osd_startlights_draw1 = pattern("D8 C9 D9 5C 24 38 DD D8 E8 ? ? ? ? E8 ? ? ? ? 89 44 24 10").count(2);
+		void* osd_startlights_draw2[] = {
+			get_pattern("6A 01 50 E8 ? ? ? ? E8 ? ? ? ? 89 44 24 10", 3),
+			get_pattern("D9 5C 24 38 DD D8 E8 ? ? ? ? 5F 5E 5B", 6),
+		};
+
+		InjectHook(display_selection_box, DisplaySelectionBox, PATCH_JUMP);
+
+		Patch<int32_t>(car_setup_selection_box_posy, 347 + 3);
+		Patch<int8_t>(car_setup_selection_box_height, 9);
+
+		InjectHook(osd_countdown_draw.get(0).get<void>(8), Blitter2D_Line2D_G_FirstLine);
+		InjectHook(osd_startlights_draw1.get(0).get<void>(8), Blitter2D_Line2D_G_FirstLine);
+		InjectHook(osd_countdown_draw.get(1).get<void>(8), Blitter2D_Line2D_G_SecondLine);
+		InjectHook(osd_startlights_draw1.get(1).get<void>(8), Blitter2D_Line2D_G_SecondLine);
+		InjectHook(osd_countdown_draw.get(2).get<void>(8), Blitter2D_Line2D_G_NOP);
+		InjectHook(osd_countdown_draw.get(3).get<void>(8), Blitter2D_Line2D_G_NOP);
+		for (void* addr : osd_startlights_draw2)
+		{
+			InjectHook(addr, Blitter2D_Line2D_G_NOP);
+		}
+
+		if (HasKeyboard)
+		{
+			InjectHook(::Keyboard_DrawTextEntryBox, BetterBoxDrawing::Keyboard_DrawTextEntryBox, PATCH_JUMP);
+		}
+	}
+	TXN_CATCH();
+
+
 	// Better widescreen support
 	// Requires: Graphics
 	if (HasGraphics) try
@@ -1941,17 +2207,11 @@ void OnInitializeHook()
 		TXN_CATCH();
 
 		// UI
-		if (HasCMR3Font && HasHandyFunction) try
+		if (HasBlitter2D && HasCMR3Font && HasHandyFunction && HasKeyboard) try
 		{
 			using namespace Graphics::Patches;
 
 			extern void (*orgSetMovieDirectory)(const char* path);
-
-			Keyboard_DrawTextEntryBox = reinterpret_cast<decltype(Keyboard_DrawTextEntryBox)>(get_pattern("56 3B C3 57 0F 84 ? ? ? ? DB 84 24", -0xD));
-
-			Core_Blitter2D_Rect2D_G = reinterpret_cast<decltype(Core_Blitter2D_Rect2D_G)>(ReadCallFrom(get_pattern("E8 ? ? ? ? 8D 44 24 68")));
-			Core_Blitter2D_Line2D_G = reinterpret_cast<decltype(Core_Blitter2D_Line2D_G)>(get_pattern("F7 D8 57", -0x14));
-			Core_Blitter2D_Rect2D_GT = reinterpret_cast<decltype(Core_Blitter2D_Rect2D_GT)>(ReadCallFrom(get_pattern("DD D8 E8 ? ? ? ? 8B 7C 24 30", 2)));
 
 			std::array<void*, 2> graphics_change_recalculate_ui = {
 				get_pattern("E8 ? ? ? ? 8B 54 24 24 89 5C 24 18"),
