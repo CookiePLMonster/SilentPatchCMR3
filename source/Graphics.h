@@ -131,8 +131,8 @@ static_assert(sizeof(OSD_Data) == 0xC4, "Wrong size: OSD_Data");
 
 struct OSD_Data2
 {
-	int field_0;
-	int field_4;
+	int m_TachoX;
+	int m_TachoY;
 	std::byte gap8;
 	char field_9;
 	std::byte gapA[10];
@@ -140,7 +140,15 @@ struct OSD_Data2
 	int field_18;
 	int field_1C;
 	int field_20;
-	std::byte gap24[96];
+	std::byte gap24[36];
+	int m_SplitTimesX;
+	int m_SplitTimesY;
+	std::byte gap50[16];
+	int m_StageProgressX;
+	int m_StageProgressLineWidth;
+	int unk;
+	int m_StageProgressY;
+	std::byte gap70[20];
 	int m_CoDriverX;
 	int m_CoDriverY;
 };
@@ -250,6 +258,17 @@ struct BlitRect2D_G
 };
 static_assert(sizeof(BlitRect2D_G) == 36, "Wrong size: BlitRect2D_G");
 
+struct BlitRect2D_GT
+{
+	uint32_t color[4];
+	float U[2];
+	float V[2];
+	float X[2];
+	float Y[2];
+	float Z;
+};
+static_assert(sizeof(BlitRect2D_GT) == 52, "Wrong size: BlitRect2D_GT");
+
 void Core_Texture_SetFilteringMethod(D3DTexture* texture, uint32_t min, uint32_t mag, uint32_t mip);
 
 OSD_Element* OSD_Element_Init_Center(OSD_Element* element, int posX, int posY, int width, int height, int a6, int a7, int a8, int a9, int a10, int a11);
@@ -261,7 +280,7 @@ inline uint32_t (*Graphics_GetScreenWidth)();
 inline uint32_t (*Graphics_GetScreenHeight)();
 
 inline void (*Core_Blitter2D_Rect2D_G)(BlitRect2D_G* rects, uint32_t numRectangles);
-inline void (*Core_Blitter2D_Rect2D_GT)(float* rects, uint32_t numRectangles);
+inline void (*Core_Blitter2D_Rect2D_GT)(BlitRect2D_GT* rects, uint32_t numRectangles);
 inline void (*Core_Blitter2D_Line2D_G)(BlitLine2D_G* lines, uint32_t numLines);
 
 inline void (*HandyFunction_Draw2DBox)(int posX, int posY, int width, int height, int color);
@@ -304,7 +323,9 @@ float GetScaledResolutionWidth();
 
 void Core_Blitter2D_Rect2D_G_Center(BlitRect2D_G* rects, uint32_t numRectangles);
 void Core_Blitter2D_Line2D_G_Center(BlitLine2D_G* lines, uint32_t numLines);
-void Core_Blitter2D_Rect2D_GT_RightAlign(float* data, uint32_t numRectangles);
+
+void Core_Blitter2D_Rect2D_GT_CenterHalf(BlitRect2D_GT* rects, uint32_t numRectangles);
+void Core_Blitter2D_Rect2D_GT_RightAlign(BlitRect2D_GT* rects, uint32_t numRectangles);
 
 void HandyFunction_Draw2DBox_Stretch(int posX, int posY, int width, int height, int color);
 void HandyFunction_Draw2DBox_Center(int posX, int posY, int width, int height, int color);
@@ -344,8 +365,8 @@ namespace Graphics::Patches
 	inline float* UI_MovieX2;
 	inline float* UI_MovieY2;
 
-	inline OSD_Data* orgOSDData;
-	inline OSD_Data2* orgOSDData2;
+	inline OSD_Data* orgOSDPositions;
+	inline OSD_Data2* orgOSDPositionsMulti;
 	inline Object_StartLight* orgStartLightData;
 
 	using Int32Patch = std::pair<int32_t*, int32_t>;

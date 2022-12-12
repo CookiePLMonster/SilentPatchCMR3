@@ -119,7 +119,22 @@ void Core_Blitter2D_Line2D_G_Center(BlitLine2D_G* lines, uint32_t numLines)
 	Core_Blitter2D_Line2D_G(lines, numLines);
 }
 
-void Core_Blitter2D_Rect2D_GT_RightAlign(float* data, uint32_t numRectangles)
+void Core_Blitter2D_Rect2D_GT_CenterHalf(BlitRect2D_GT* rects, uint32_t numRectangles)
+{
+	const float resolutionWidth = static_cast<float>(Graphics_GetScreenWidth());
+	const float scaledOldCenter = 160.0f * (resolutionWidth / GetScaledResolutionWidth());
+	const float scaledRealCenter = resolutionWidth / 4.0f;
+	const float offset = scaledRealCenter - scaledOldCenter;
+	for (uint32_t i = 0; i < numRectangles; ++i)
+	{
+		// Those rectangles are already multiplied for resolution
+		rects[i].X[0] += offset;
+		rects[i].X[1] += offset;
+	}
+	Core_Blitter2D_Rect2D_GT(rects, numRectangles);
+}
+
+void Core_Blitter2D_Rect2D_GT_RightAlign(BlitRect2D_GT* rects, uint32_t numRectangles)
 {
 	const float resolutionWidth = static_cast<float>(Graphics_GetScreenWidth());
 	const float scaledOldRight = 640.0f * (resolutionWidth / GetScaledResolutionWidth());
@@ -127,11 +142,10 @@ void Core_Blitter2D_Rect2D_GT_RightAlign(float* data, uint32_t numRectangles)
 	for (uint32_t i = 0; i < numRectangles; ++i)
 	{
 		// Those rectangles are already multiplied for resolution
-		float* rect = &data[13 * i];
-		rect[8] += offset;
-		rect[9] += offset;
+		rects[i].X[0] += offset;
+		rects[i].X[1] += offset;
 	}
-	Core_Blitter2D_Rect2D_GT(data, numRectangles);
+	Core_Blitter2D_Rect2D_GT(rects, numRectangles);
 }
 
 void HandyFunction_Draw2DBox_Stretch(int posX, int posY, int width, int height, int color)
@@ -231,13 +245,13 @@ void Graphics_Viewports_SetAspectRatios()
 	}
 }
 
-static OSD_Data OSD_DataOriginal[4];
-static OSD_Data2 OSD_Data2Original[4];
+static OSD_Data OSDPositions_Original[4];
+static OSD_Data2 OSDPositionsMulti_Original[4];
 static Object_StartLight Object_StartLightOriginal[2];
 void OSD_Main_SetUpStructsForWidescreen()
 {
-	memcpy(OSD_DataOriginal, orgOSDData, sizeof(OSD_DataOriginal));
-	memcpy(OSD_Data2Original, orgOSDData2, sizeof(OSD_Data2Original));
+	memcpy(OSDPositions_Original, orgOSDPositions, sizeof(OSDPositions_Original));
+	memcpy(OSDPositionsMulti_Original, orgOSDPositionsMulti, sizeof(OSDPositionsMulti_Original));
 	memcpy(Object_StartLightOriginal, orgStartLightData, sizeof(Object_StartLightOriginal));
 }
 
@@ -267,6 +281,12 @@ void RecalculateUI()
 	{
 		const auto offset = 640 - val;
 		return static_cast<decltype(val)>(ScaledResWidth - offset);
+	};
+
+	// Adjust for 590 * X / 640
+	auto centered_adj = [ScaledResWidth, &centered](const auto& val)
+	{
+		return 640 * centered((static_cast<int>(ScaledResWidth) - 50) * val / static_cast<int>(ScaledResWidth)) / 590;
 	};
 
 	{
@@ -303,14 +323,18 @@ void RecalculateUI()
 	{
 		for (size_t i = 0; i < 4; i++)
 		{
-			orgOSDData[i].m_CoDriverX = centered(OSD_DataOriginal[i].m_CoDriverX);
+			orgOSDPositions[i].m_CoDriverX = centered(OSDPositions_Original[i].m_CoDriverX);
 		}
 
 		// [0] is aligned to right, the rest is centered
-		orgOSDData2[0].m_CoDriverX = right(OSD_Data2Original[0].m_CoDriverX);
+		orgOSDPositionsMulti[0].m_CoDriverX = right(OSDPositionsMulti_Original[0].m_CoDriverX);
+		orgOSDPositionsMulti[0].m_TachoX = right(OSDPositionsMulti_Original[0].m_TachoX);
 		for (size_t i = 1; i < 4; i++)
 		{
-			orgOSDData2[i].m_CoDriverX = centeredHalf(OSD_Data2Original[i].m_CoDriverX);
+			orgOSDPositionsMulti[i].m_CoDriverX = centeredHalf(OSDPositionsMulti_Original[i].m_CoDriverX);
+
+			orgOSDPositionsMulti[i].m_StageProgressX = centered(OSDPositionsMulti_Original[i].m_StageProgressX) + 1; // Should this be half the line width maybe?
+			orgOSDPositionsMulti[i].m_SplitTimesX = centered_adj(OSDPositionsMulti_Original[i].m_SplitTimesX);
 		}
 	}
 

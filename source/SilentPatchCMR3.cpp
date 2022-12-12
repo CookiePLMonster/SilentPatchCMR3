@@ -2470,6 +2470,13 @@ void OnInitializeHook()
 			auto controller_calibrate_centered_line1 = pattern("56 50 57 50 E8").count(2);
 			auto controller_calibrate_centered_line2 = pattern("8B 44 24 1C 50 57 50 E8").count(4);
 
+			// Splitscreen
+			// Technically these are not centered, but same math applies
+			UI_CenteredElements.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("83 FF 01 75 1F A1 ? ? ? ? C7 00", 12), 140);
+			UI_CenteredElements.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("83 FF 03 75 3A 8B 0D ? ? ? ? B8 ? ? ? ? C7 01", 0x12), 140);
+
+			auto splitscreen_4th_viewport_rect2d = get_pattern("DD D8 E8 ? ? ? ? 8B 7C 24 30", 2);
+
 			// Movie rendering
 			auto movie_rect = pattern("C7 05 ? ? ? ? 00 00 00 BF C7 05 ? ? ? ? 00 00 00 BF").get_one();
 			auto movie_name_setdir = get_pattern("E8 ? ? ? ? E8 ? ? ? ? 85 C0 A1 ? ? ? ? 0F 95 C3");
@@ -2478,8 +2485,8 @@ void OnInitializeHook()
 			UI_MovieX2 = movie_rect.get<float>(20 + 6);
 			UI_MovieY2 = movie_rect.get<float>(30 + 6);
 
-			orgOSDData = *osd_data.get<OSD_Data*>(2+3);
-			orgOSDData2 = *osd_data.get<OSD_Data2*>(27+3);
+			orgOSDPositions = *osd_data.get<OSD_Data*>(2+3);
+			orgOSDPositionsMulti = *osd_data.get<OSD_Data2*>(27+3);
 
 			orgStartLightData = *get_pattern<Object_StartLight*>("8D 34 8D ? ? ? ? 89 74 24 0C", 3);
 
@@ -2701,6 +2708,8 @@ void OnInitializeHook()
 			{
 				InjectHook(match.get<void>(7), HandyFunction_Draw2DLineFromTo_Center);
 			});
+
+			InjectHook(splitscreen_4th_viewport_rect2d, Core_Blitter2D_Rect2D_GT_CenterHalf);
 			
 			ReadCall(movie_name_setdir, orgSetMovieDirectory);
 			InjectHook(movie_name_setdir, SetMovieDirectory_SetDimensions);
