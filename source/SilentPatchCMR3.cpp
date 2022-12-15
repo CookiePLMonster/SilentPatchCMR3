@@ -1499,8 +1499,8 @@ namespace NewGraphicsOptions
 	{
 		__asm
 		{
-			push	dword ptr [esp+228h-218h] // onColor
-			push	dword ptr [esp+22Ch-214h] // offColor
+			push	dword ptr [esp+228h-214h] // onColor
+			push	dword ptr [esp+22Ch-218h] // offColor
 			push	ebx // entryID
 			push	dword ptr [esp+234h-208h] // posY
 			push	dword ptr [esp+238h+8] // interp
@@ -1532,6 +1532,18 @@ namespace NewGraphicsOptions
 	{
 		float* fov = reinterpret_cast<float*>(static_cast<char*>(camera) + 4);
 		*fov = interiorFOV;
+	}
+
+	static bool VerticalSplitscreen = false;
+	uint32_t IsVerticalSplitscreen()
+	{
+		return VerticalSplitscreen;
+	}
+
+	uint32_t IsVerticalSplitscreen_ReadOption()
+	{
+		VerticalSplitscreen = CMR_FE_GetVerticalSplitscreen();
+		return IsVerticalSplitscreen();
 	}
 }
 
@@ -2474,6 +2486,7 @@ void OnInitializeHook()
 			// Technically these are not centered, but same math applies
 			UI_CenteredElements.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("83 FF 01 75 1F A1 ? ? ? ? C7 00", 12), 140);
 			UI_CenteredElements.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("83 FF 03 75 3A 8B 0D ? ? ? ? B8 ? ? ? ? C7 01", 0x12), 140);
+			UI_CenteredElements.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("8B 0D ? ? ? ? C7 01 ? ? ? ? 8B 15 ? ? ? ? C7 42", 6+2), 160);
 
 			auto splitscreen_4th_viewport_rect2d = get_pattern("DD D8 E8 ? ? ? ? 8B 7C 24 30", 2);
 
@@ -3075,13 +3088,13 @@ void OnInitializeHook()
 	TXN_CATCH();
 
 	// Additional Graphics options
-	// FOV Control, TODO MORE
+	// FOV Control, Split Screen option
 	// Requires patches: Registry (for saving/loading)
 	if (HasPatches_Registry) try
 	{
 		using namespace NewGraphicsOptions;
 
-		bool HasPatches_Graphics = false;
+		bool HasPatches_FOV = false;
 		try
 		{
 			auto cameras_after_initialise = get_pattern("7C E5 68 ? ? ? ? E8", 7);
@@ -3106,12 +3119,41 @@ void OnInitializeHook()
 
 			InterceptCall(cameras_after_initialise, orgCameras_AfterInitialise, Cameras_AfterInitialise);
 
-			HasPatches_Graphics = true;
+			HasPatches_FOV = true;
+		}
+		TXN_CATCH();
+
+		bool HasPatches_SplitScreenOption = false;
+		try
+		{
+			auto get_widescreen_init = get_pattern("E8 ? ? ? ? E8 ? ? ? ? 25 ? ? ? ? 8B F0", 5);
+
+			auto get_widescreen1 = pattern("E8 ? ? ? ? F6 D8 1B C0 40 8B F0").count(2);
+			void* get_widescreen[] = {
+				ReadCallFrom(get_pattern("E8 ? ? ? ? 8B 75 08 89 44 24 3C")),
+				get_pattern("E8 ? ? ? ? F6 D8 1B C0 40 83 FE 02"),
+				get_pattern("E8 ? ? ? ? F6 D8 1B C0 40 8B F8"),
+				get_pattern("E8 ? ? ? ? F6 D8 1B C0 6A 01 40"),
+				get_pattern("E8 ? ? ? ? 84 C0 75 08"),
+				get_pattern("E8 ? ? ? ? F6 D8 1B C0 68"),
+				get_pattern("E8 ? ? ? ? 8B 9C 24 ? ? ? ? F6 D8"), // Unsure
+				get_pattern("75 1C E8 ? ? ? ? 85 C0 75 07", 2),
+				get_widescreen1.get(0).get<void>(),
+				get_widescreen1.get(1).get<void>(),
+			};
+
+			InjectHook(get_widescreen_init, IsVerticalSplitscreen_ReadOption);
+			for (void* addr : get_widescreen)
+			{
+				InjectHook(addr, IsVerticalSplitscreen);
+			}
+
+			HasPatches_SplitScreenOption = true;
 		}
 		TXN_CATCH();
 
 		// Only make frontend changes if all functionality has been successfully patched in
-		if (HasGlobals && HasCMR3FE && HasCMR3Font && HasMenuHook && HasLanguageHook && HasPatches_Graphics) try
+		if (HasGlobals && HasCMR3FE && HasCMR3Font && HasMenuHook && HasLanguageHook && HasPatches_FOV && HasPatches_SplitScreenOption) try
 		{	
 			void* back_locals[] = {
 				get_pattern("8D 85 ? ? ? ? 50 E8 ? ? ? ? BA", 2),
@@ -3134,7 +3176,7 @@ void OnInitializeHook()
 			void** orgJumpTable = *graphics_display_jump_table.get<void**>(9 + 3);
 			static const void* graphics_display_new_jump_table[EntryID::GRAPHICS_NUM] = {
 				orgJumpTable[0], orgJumpTable[1], orgJumpTable[2], orgJumpTable[3],
-				&PC_GraphicsOptions_Display_CaseNewOptions, &PC_GraphicsOptions_Display_CaseNewOptions,
+				&PC_GraphicsOptions_Display_CaseNewOptions, &PC_GraphicsOptions_Display_CaseNewOptions, &PC_GraphicsOptions_Display_CaseNewOptions,
 				orgJumpTable[4], orgJumpTable[5]
 			};
 			Patch(graphics_display_jump_table.get<void**>(9 + 3), &graphics_display_new_jump_table);

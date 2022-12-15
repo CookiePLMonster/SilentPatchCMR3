@@ -17,6 +17,8 @@ namespace Registry
 	inline const wchar_t* EXTERIOR_FOV_KEY_NAME = L"EXTERIOR_FOV";
 	inline const wchar_t* INTERIOR_FOV_KEY_NAME = L"INTERIOR_FOV";
 
+	inline const wchar_t* SPLIT_SCREEN_KEY_NAME = L"SPLIT_SCREEN";
+
 	inline const wchar_t* ENVMAP_SKY_KEY_NAME = L"ENVMAP_SKY";
 
 	void Init();

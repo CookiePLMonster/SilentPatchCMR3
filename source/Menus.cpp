@@ -55,6 +55,16 @@ void CMR_FE_SetInteriorFOV(int FOV)
 	Registry::SetRegistryDword(Registry::GRAPHICS_SECTION_NAME, Registry::INTERIOR_FOV_KEY_NAME, FOV);
 }
 
+bool CMR_FE_GetVerticalSplitscreen()
+{
+	return Registry::GetRegistryDword(Registry::GRAPHICS_SECTION_NAME, Registry::SPLIT_SCREEN_KEY_NAME).value_or(0) != 0;
+}
+
+void CMR_FE_SetVerticalSplitscreen(bool vertical)
+{
+	Registry::SetRegistryDword(Registry::GRAPHICS_SECTION_NAME, Registry::SPLIT_SCREEN_KEY_NAME, vertical ? 1 : 0);
+}
+
 void DrawLeftRightArrows_RightAlign(MenuDefinition* menu, uint32_t entryID, float interp, int leftArrow, int rightArrow, uint32_t posY)
 {
 	const float scaledWidth = GetScaledResolutionWidth();
@@ -90,9 +100,13 @@ void FrontEndMenuSystem_SetupMenus_Custom(int languagesOnly)
 		{
 			// Make space for FOV control
 			auto* optSource = &menu.m_entries[4];
-			auto* optDest = optSource + 2;
+			auto* optDest = optSource + 3;
 			memmove(optDest, optSource, 2 * sizeof(*optSource));
 		}
+
+		memcpy(&menu.m_entries[EntryID::GRAPHICS_SPLIT_SCREEN], &menu.m_entries[0], sizeof(menu.m_entries[0]));
+		menu.m_entries[EntryID::GRAPHICS_SPLIT_SCREEN].m_stringID = 353;
+		menu.m_entries[EntryID::GRAPHICS_SPLIT_SCREEN].m_entryDataString = nullptr;
 
 		// Base off Graphics Quality as it's the closest
 		memcpy(&menu.m_entries[EntryID::GRAPHICS_EXTERIOR_FOV], &menu.m_entries[2], sizeof(menu.m_entries[2]));
@@ -430,10 +444,26 @@ void PC_GraphicsAdvanced_DisplayOnOff(MenuDefinition* /*menu*/, const char* opti
 	}
 }
 
-void PC_GraphicsOptions_Display_NewOptions(MenuDefinition* menu, float interp, uint32_t posY, uint32_t entryID, uint32_t /*offColor*/, uint32_t /*onColor*/)
+void PC_GraphicsOptions_Display_NewOptions(MenuDefinition* menu, float interp, uint32_t posY, uint32_t entryID, uint32_t offColor, uint32_t onColor)
 {
 	switch (entryID)
 	{
+	case EntryID::GRAPHICS_SPLIT_SCREEN:
+	{
+		const uint8_t interpValue = static_cast<uint8_t>(interp * interp * 255.0f);
+
+		sprintf_s(gszTempString, 512, "%s: ", Language_GetString(menu->m_entries[entryID].m_stringID));
+		const int splitScreenTextLength = CMR3Font_GetTextWidth(0, gszTempString);
+
+		char buf[512];
+		const char* horizontalText = Language_GetString(269);
+		sprintf_s(buf, "%s ", horizontalText);
+		const int horizontalTextLength = CMR3Font_GetTextWidth(0, buf);
+		CMR3Font_BlitText_RightAlign(0, buf, splitScreenTextLength + 393, posY, HandyFunction_AlphaCombineFlat(offColor, interpValue), 9);
+
+		CMR3Font_BlitText_RightAlign(0, Language_GetString(270), splitScreenTextLength + horizontalTextLength + 393, posY, HandyFunction_AlphaCombineFlat(onColor, interpValue), 9);
+		break;
+	}
 	case EntryID::GRAPHICS_EXTERIOR_FOV:
 	case EntryID::GRAPHICS_INTERIOR_FOV:
 	{
@@ -455,12 +485,14 @@ void PC_GraphicsOptions_Display_NewOptions(MenuDefinition* menu, float interp, u
 
 void PC_GraphicsOptions_Enter_NewOptions(MenuDefinition* menu, int /*a2*/)
 {
+	menu->m_entries[EntryID::GRAPHICS_SPLIT_SCREEN].m_value = CMR_FE_GetVerticalSplitscreen();
 	menu->m_entries[EntryID::GRAPHICS_EXTERIOR_FOV].m_value = (CMR_FE_GetExteriorFOV() - FOV_MIN) / FOV_STEP;
 	menu->m_entries[EntryID::GRAPHICS_INTERIOR_FOV].m_value = (CMR_FE_GetInteriorFOV() - FOV_MIN) / FOV_STEP;
 }
 
 void PC_GraphicsOptions_Exit_NewOptions(MenuDefinition* menu, int /*a2*/)
 {
+	CMR_FE_SetVerticalSplitscreen(menu->m_entries[EntryID::GRAPHICS_SPLIT_SCREEN].m_value != 0);
 	CMR_FE_SetExteriorFOV(FOV_MIN + menu->m_entries[EntryID::GRAPHICS_EXTERIOR_FOV].m_value * FOV_STEP);
 	CMR_FE_SetInteriorFOV(FOV_MIN + menu->m_entries[EntryID::GRAPHICS_INTERIOR_FOV].m_value * FOV_STEP);
 }

@@ -27,11 +27,12 @@ namespace EntryID
 	static constexpr size_t GRAPHICS_ADV_CANCEL = 13; // Original - 10
 	static constexpr size_t GRAPHICS_ADV_NUM = 14; // Original - 11
 
-	static constexpr size_t GRAPHICS_EXTERIOR_FOV = 4; // NEW
-	static constexpr size_t GRAPHICS_INTERIOR_FOV = 5; // NEW
-	static constexpr size_t GRAPHICS_ACCEPT = 6; // Original - 4
-	static constexpr size_t GRAPHICS_BACK = 7; // Original - 5
-	static constexpr size_t GRAPHICS_NUM = 8; // Original - 6
+	static constexpr size_t GRAPHICS_SPLIT_SCREEN = 4; // NEW
+	static constexpr size_t GRAPHICS_EXTERIOR_FOV = 5; // NEW
+	static constexpr size_t GRAPHICS_INTERIOR_FOV = 6; // NEW
+	static constexpr size_t GRAPHICS_ACCEPT = 7; // Original - 4
+	static constexpr size_t GRAPHICS_BACK = 8; // Original - 5
+	static constexpr size_t GRAPHICS_NUM = 9; // Original - 6
 }
 
 struct Packed_Registry
@@ -64,6 +65,9 @@ int CMR_FE_GetExteriorFOV();
 int CMR_FE_GetInteriorFOV();
 void CMR_FE_SetExteriorFOV(int FOV);
 void CMR_FE_SetInteriorFOV(int FOV);
+
+bool CMR_FE_GetVerticalSplitscreen();
+void CMR_FE_SetVerticalSplitscreen(bool vertical);
 
 inline void (*SetUseLowQualityTextures)(uint32_t);
 
