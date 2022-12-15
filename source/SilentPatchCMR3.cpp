@@ -231,12 +231,63 @@ namespace OcclusionQueries
 		OcclusionQuery_UpdateInternal(query);
 		return query->m_queryState == 0 || query->m_queryState == 3 ? 3 : 0;
 	}
-}
 
-void (*orgCalculateSunColorFromOcclusion)(float val);
-void CalculateSunColorFromOcclusion_Clamped(float val)
-{
-	orgCalculateSunColorFromOcclusion(std::clamp(val, 0.0f, 1.0f));
+	void (*orgCalculateSunColorFromOcclusion)(float val);
+	void CalculateSunColorFromOcclusion_Clamped(float val)
+	{
+		orgCalculateSunColorFromOcclusion(std::clamp(val, 0.0f, 1.0f));
+	}
+
+	static OcclusionQuery** gpSunOcclusion_Original;
+	static float* gfVisibleSun_Original;
+
+	std::array<OcclusionQuery*, 4> gapSunOcclusion;
+	std::array<float, 4> gafVisibleSun;
+
+	static OcclusionQuery* (*orgOcclusion_Create)();
+	static void (*orgOcclusion_Destroy)(OcclusionQuery* occlusion);
+
+	void* Occlusion_Create_Hooked()
+	{
+		for (auto& occlusion : gapSunOcclusion)
+		{
+			occlusion = orgOcclusion_Create();
+		}
+
+		// Return a fake result so null checks pass
+		return reinterpret_cast<void*>(1);
+	}
+
+	void Occlusion_Destroy_Hooked(OcclusionQuery* /*occlusion*/)
+	{
+		for (auto& occlusion : gapSunOcclusion)
+		{
+			orgOcclusion_Destroy(occlusion);
+			occlusion = nullptr;
+		}
+	}
+
+	static void* Render_RenderGameCommon1_JumpBack;
+	__declspec(naked) void Render_RenderGameCommon1_Original(uint8_t)
+	{
+		__asm
+		{
+			sub		esp, 20h
+			push	ebx
+			push	ebp
+			jmp		[Render_RenderGameCommon1_JumpBack]
+		}
+	}
+
+	void Render_RenderGameCommon1_SwitchOcclusion(uint8_t viewportNo)
+	{
+		*gpSunOcclusion_Original = gapSunOcclusion[viewportNo];
+		*gfVisibleSun_Original = gafVisibleSun[viewportNo];
+
+		Render_RenderGameCommon1_Original(viewportNo);
+
+		gafVisibleSun[viewportNo] = *gfVisibleSun_Original;
+	}
 }
 
 namespace QuitMessageFix
@@ -1976,6 +2027,12 @@ void OnInitializeHook()
 
 		auto calculate_color_from_occlusion = get_pattern("E8 ? ? ? ? 53 56 57 6A 03");
 
+		auto load_horizon = pattern("A3 ? ? ? ? E8 ? ? ? ? 50 E8 ? ? ? ? 5E 8B E5").get_one();
+		auto destroy_horizon = get_pattern("50 E8 ? ? ? ? A1 ? ? ? ? 3B C6 74 0C", 1);
+		auto visible_sun = *get_pattern<float*>("D9 05 ? ? ? ? D8 1D ? ? ? ? DF E0 F6 C4 44 7B 0B", 2);
+
+		auto render_game_common1 = pattern("57 33 FF 57 E8 ? ? ? ? 57 E8 ? ? ? ? 57 E8 ? ? ? ? 6A 01").get_one();
+
 		// shl eax, 4 -> imul eax, sizeof(OcclusionQuery)
 		Patch(mul_struct_size, {0x6B, 0xC0, sizeof(OcclusionQuery)});
 		Patch<uint8_t>(push_struct_size,  sizeof(OcclusionQuery));
@@ -1991,8 +2048,17 @@ void OnInitializeHook()
 		InjectHook(is_query_idle.get<void>(0), OcclusionQuery_IsIdle);
 		InjectHook(is_query_idle.get<void>(5 + 3 + 2), issue_query_return, PATCH_JUMP);
 
-		ReadCall(calculate_color_from_occlusion, orgCalculateSunColorFromOcclusion);
-		InjectHook(calculate_color_from_occlusion, CalculateSunColorFromOcclusion_Clamped);
+		InterceptCall(calculate_color_from_occlusion, orgCalculateSunColorFromOcclusion, CalculateSunColorFromOcclusion_Clamped);
+
+		// One occlusion query per viewport
+		gpSunOcclusion_Original = *load_horizon.get<OcclusionQuery**>(1);
+		gfVisibleSun_Original = visible_sun;
+
+		InterceptCall(load_horizon.get<void>(-10), orgOcclusion_Create, Occlusion_Create_Hooked);
+		InterceptCall(destroy_horizon, orgOcclusion_Destroy, Occlusion_Destroy_Hooked);
+
+		Render_RenderGameCommon1_JumpBack = render_game_common1.get<void>();
+		InjectHook(render_game_common1.get<void>(-5), Render_RenderGameCommon1_SwitchOcclusion, PATCH_JUMP);
 	}
 	TXN_CATCH();
 
