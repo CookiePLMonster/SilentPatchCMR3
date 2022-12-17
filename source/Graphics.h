@@ -324,9 +324,12 @@ inline Graphics_Config* gGraphicsConfig;
 const Graphics_Config& Graphics_GetCurrentConfig();
 
 inline D3DViewport** gViewports;
-inline D3DViewport** gDefaultViewport;
+inline D3DViewport** gpFullScreenViewport;
+inline D3DViewport** gpCurrentViewport;
 
 inline D3DPRESENT_PARAMETERS* gd3dPP;
+inline IDirect3DDevice9** gpd3dDevice;
+inline D3DCAPS9* gD3DCaps;
 
 float GetScaledResolutionWidth();
 
@@ -353,6 +356,7 @@ void Graphics_Viewports_SetAspectRatios();
 void OSD_Main_SetUpStructsForWidescreen();
 
 void Viewport_SetDimensions(D3DViewport* viewport, int left, int top, int right, int bottom);
+D3DViewport* Viewport_GetCurrent();
 
 void SetMovieDirectory_SetDimensions(const char* path);
 

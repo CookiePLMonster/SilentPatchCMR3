@@ -352,7 +352,7 @@ void Viewport_SetDimensions(D3DViewport* viewport, int left, int top, int right,
 {
 	if (viewport == nullptr)
 	{
-		viewport = *gDefaultViewport;
+		viewport = *gpFullScreenViewport;
 	}
 
 	const int32_t ResWidth = Graphics_GetScreenWidth();
@@ -368,6 +368,11 @@ void Viewport_SetDimensions(D3DViewport* viewport, int left, int top, int right,
 	viewport->m_rightScale = static_cast<float>(right) / ResWidth;
 	viewport->m_bottomScale = static_cast<float>(bottom) / ResHeight;
 	viewport->m_vertFov = 4.0f/3.0f;
+}
+
+D3DViewport* Viewport_GetCurrent()
+{
+	return *gpCurrentViewport;
 }
 
 static bool bCurrentMoviePillarboxed = false;

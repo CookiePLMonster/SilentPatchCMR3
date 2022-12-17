@@ -849,6 +849,51 @@ namespace HalfPixel
 	}
 }
 
+namespace ScissorTacho
+{
+	__declspec(naked) int __cdecl ftol_fake()
+	{
+		__asm
+		{
+			sub		esp, 4
+			fstp	dword ptr [esp]
+			pop		eax
+			retn
+		}
+	}
+
+	static void (*orgHandyFunction_BlitTexture)(void* texture, int u1, int v1, int u2, int v2, int posX, int posY, int width, int height, uint32_t color);
+	void HandyFunction_BlitTexture_Scissor(void* texture, int u1, int v1, float u2, int v2, int posX, int posY, float width, int height, uint32_t color)
+	{
+		if (width <= 0.0f)
+		{
+			return;
+		}
+
+		IDirect3DDevice9* device = *gpd3dDevice;
+
+		if ((gD3DCaps->RasterCaps & D3DPRASTERCAPS_SCISSORTEST) != 0)
+		{
+			const float ScaleX = Graphics_GetScreenWidth() / GetScaledResolutionWidth();
+
+			device->SetRenderState(D3DRS_SCISSORTESTENABLE, TRUE);
+
+			const int viewportOffset = Viewport_GetCurrent()->m_left;
+			const RECT scissorRect { static_cast<LONG>(posX * ScaleX) + viewportOffset, 0,
+				static_cast<LONG>((posX+width) * ScaleX) + viewportOffset, static_cast<LONG>(Graphics_GetScreenHeight()) };
+			device->SetScissorRect(&scissorRect);
+
+			orgHandyFunction_BlitTexture(texture, u1, v1, 128, v2, posX, posY, 128, height, color);
+
+			device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
+		}
+		else
+		{
+			orgHandyFunction_BlitTexture(texture, u1, v1, static_cast<int>(u2), v2, posX, posY, static_cast<int>(width), height, color);
+		}
+	}
+}
+
 namespace BetterBoxDrawing
 {
 	void DisplaySelectionBox(int posX, int posY, int width, int height, unsigned int alpha, int fill)
@@ -1764,7 +1809,12 @@ void OnInitializeHook()
 	bool HasCored3d = false;
 	try
 	{
-		gd3dPP = *get_pattern<D3DPRESENT_PARAMETERS*>("68 ? ? ? ? 50 FF 52 40", 1);
+		auto check_for_device_lost = pattern("68 ? ? ? ? 50 FF 52 40").get_one();
+		auto caps = *get_pattern<D3DCAPS9*>("BF ? ? ? ? F3 A5 A1 ? ? ? ? 85 C0", 1);
+
+		gd3dPP = *check_for_device_lost.get<D3DPRESENT_PARAMETERS*>(1);
+		gpd3dDevice = *check_for_device_lost.get<IDirect3DDevice9**>(-7 + 1);
+		gD3DCaps = caps;
 
 		HasCored3d = true;
 	}
@@ -1845,6 +1895,23 @@ void OnInitializeHook()
 		gGraphicsConfig = *reinterpret_cast<Graphics_Config**>(get_current_config + 0xC);
 
 		HasGraphics = true;
+	}
+	TXN_CATCH();
+
+	bool HasViewport = false;
+	try
+	{
+		auto set_aspect_ratio = get_pattern("8B 44 24 04 85 C0 75 1C");
+		auto viewports = *get_pattern<D3DViewport**>("8B 35 ? ? ? ? 8B C6 5F", 2);
+		auto full_screen_viewport = *get_pattern<D3DViewport**>("A1 ? ? ? ? D9 44 24 08 D9 58 1C", 1);
+		auto current_viewport = *get_pattern<D3DViewport**>("A3 ? ? ? ? 8B 48 54", 1);
+
+		gpFullScreenViewport = full_screen_viewport;
+		gpCurrentViewport = current_viewport;
+		Viewport_SetAspectRatio = reinterpret_cast<decltype(Viewport_SetAspectRatio)>(set_aspect_ratio);
+		gViewports = viewports;
+
+		HasViewport = true;
 	}
 	TXN_CATCH();
 
@@ -2262,6 +2329,20 @@ void OnInitializeHook()
 	TXN_CATCH();
 
 
+	// Scissor-based digital tacho
+	if (HasCored3d && HasGraphics && HasViewport) try
+	{
+		using namespace ScissorTacho;
+
+		auto blit_texture = get_pattern("50 6A 00 6A 00 52 E8", 6);
+		auto ftol = get_pattern("D9 44 24 10 E8 ? ? ? ? 8B 0D ? ? ? ? 6A FF 8B 51 0C", 4);
+
+		InterceptCall(blit_texture, orgHandyFunction_BlitTexture, HandyFunction_BlitTexture_Scissor);
+		InjectHook(ftol, ftol_fake);
+	}
+	TXN_CATCH();
+
+
 	// Better line box drawing (without gaps and overlapping lines)
 	if (HasBlitter2D && HasGraphics) try
 	{
@@ -2304,25 +2385,15 @@ void OnInitializeHook()
 
 	// Better widescreen support
 	// Requires: Graphics
-	if (HasGraphics) try
+	if (HasGraphics && HasViewport) try
 	{
-		//auto get_num_players = ReadCallFrom(get_pattern("E8 ? ? ? ? 88 44 24 23"));
-		//GetNumPlayers = reinterpret_cast<decltype(GetNumPlayers)>(get_num_players);
-		gDefaultViewport = *get_pattern<D3DViewport**>("A1 ? ? ? ? D9 44 24 08 D9 58 1C", 1);
-
 		// Viewports
 		try
 		{
-			auto set_aspect_ratio = get_pattern("8B 44 24 04 85 C0 75 1C");
-			auto viewports = *get_pattern<D3DViewport**>("8B 35 ? ? ? ? 8B C6 5F", 2);
-
 			auto set_viewport = ReadCallFrom(get_pattern("E8 ? ? ? ? 8B 4C 24 0C 8B 56 60"));
 			auto set_aspect_ratios = get_pattern("83 EC 64 56 E8");
 
 			auto recalc_fov = pattern("D8 0D ? ? ? ? DA 74 24 30 ").get_one();
-
-			Viewport_SetAspectRatio = reinterpret_cast<decltype(Viewport_SetAspectRatio)>(set_aspect_ratio);
-			gViewports = viewports;
 
 			InjectHook(set_viewport, Viewport_SetDimensions, PATCH_JUMP);
 			InjectHook(set_aspect_ratios, Graphics_Viewports_SetAspectRatios, PATCH_JUMP);
