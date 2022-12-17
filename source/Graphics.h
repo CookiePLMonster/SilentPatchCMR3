@@ -294,6 +294,7 @@ inline void (*Core_Blitter2D_Line2D_G)(BlitLine2D_G* lines, uint32_t numLines);
 
 inline void (*HandyFunction_Draw2DBox)(int posX, int posY, int width, int height, int color);
 inline void (*HandyFunction_Draw2DLineFromTo)(float x1, float y1, float x2, float y2, uint32_t* z, uint32_t color);
+inline int (*HandyFunction_Clip2DRect)(BlitRect2D_G* rect, float x1, float y1, float x2, float y2);
 inline void (*CMR3Font_BlitText)(uint8_t fontID, const char* text, int posX, int posY, int a5, char a6);
 inline int (*CMR3Font_GetTextWidth)(uint8_t fontID, const char* text);
 

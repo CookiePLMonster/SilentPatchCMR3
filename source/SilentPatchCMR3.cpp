@@ -1030,6 +1030,94 @@ namespace BetterBoxDrawing
 		Core_Blitter2D_Rect2D_G(rects, std::size(rects));
 	}
 
+	void HandyFunction_DrawClipped2DBox(int posX, int posY, int width, int height, unsigned int color, int clipX, int clipY, int clipWidth, int clipHeight, int fill)
+	{
+		const float Scale = GetScaledResolutionWidth();
+		const float ScaleX = Graphics_GetScreenWidth() / Scale;
+		const float ScaleY = Graphics_GetScreenHeight() / 480.0f;
+
+		// Cut height/width down by 1px to make clipped boxes consistent with clipped fonts (original bug most likely)
+		const float ClipX1 = clipX * ScaleX, ClipX2 = (clipX + clipWidth) * ScaleX - 1.0f;
+		const float ClipY1 = clipY * ScaleY, ClipY2 = (clipY + clipHeight) * ScaleY - 1.0f;
+
+		// The original game used lines, but we use rects for nice and tidy line thickness
+		const float LineThickness = std::max(1.0f, std::floor(ScaleX));
+		const float HalfLineThickness = LineThickness / 2.0f;
+
+		if (fill != 0)
+		{
+			BlitRect2D_G rect;
+			rect.Z = 0.0f;
+			std::fill(std::begin(rect.color), std::end(rect.color), color);
+
+			rect.X[0] = (posX * ScaleX) - HalfLineThickness;
+			rect.X[1] = ((posX + width) * ScaleX) + HalfLineThickness;
+
+			rect.Y[0] = (posY * ScaleY) - HalfLineThickness;
+			rect.Y[1] = ((posY + height) * ScaleY) + HalfLineThickness;
+			if (HandyFunction_Clip2DRect(&rect, ClipX1, ClipY1, ClipX2, ClipY2) != 0)
+			{
+				Core_Blitter2D_Rect2D_G(&rect, 1);
+			}
+			return;
+		}
+
+		BlitRect2D_G rects[4];
+		for (BlitRect2D_G& rect : rects)
+		{
+			std::fill(std::begin(rect.color), std::end(rect.color), color);
+			rect.Z = 0.0f;
+		}
+
+		uint32_t numSides = 0;
+		{
+			BlitRect2D_G& top = rects[numSides];
+			top.X[0] = (posX * ScaleX) - HalfLineThickness;
+			top.X[1] = ((posX + width) * ScaleX) + HalfLineThickness;
+			top.Y[0] = (posY * ScaleY) - HalfLineThickness;
+			top.Y[1] = (posY * ScaleY) + HalfLineThickness;
+			if (HandyFunction_Clip2DRect(&top, ClipX1, ClipY1, ClipX2, ClipY2) != 0)
+			{
+				numSides++;
+			}
+		}
+		{
+			BlitRect2D_G& right = rects[numSides];
+			right.X[0] = ((posX + width) * ScaleX) - HalfLineThickness;
+			right.X[1] = ((posX + width) * ScaleX) + HalfLineThickness;
+			right.Y[0] = (posY * ScaleY) + HalfLineThickness;
+			right.Y[1] = ((posY + height) * ScaleY) - HalfLineThickness;
+			if (HandyFunction_Clip2DRect(&right, ClipX1, ClipY1, ClipX2, ClipY2) != 0)
+			{
+				numSides++;
+			}
+		}
+		{
+			BlitRect2D_G& bottom = rects[numSides];
+			bottom.X[0] = (posX * ScaleX) - HalfLineThickness;
+			bottom.X[1] = ((posX + width) * ScaleX) + HalfLineThickness;
+			bottom.Y[0] = ((posY + height) * ScaleY) - HalfLineThickness;
+			bottom.Y[1] = ((posY + height) * ScaleY) + HalfLineThickness;
+			if (HandyFunction_Clip2DRect(&bottom, ClipX1, ClipY1, ClipX2, ClipY2) != 0)
+			{
+				numSides++;
+			}
+		}
+		{
+			BlitRect2D_G& left = rects[numSides];
+			left.X[0] = (posX * ScaleX) - HalfLineThickness;
+			left.X[1] = (posX * ScaleX) + HalfLineThickness;
+			left.Y[0] = (posY * ScaleY) + HalfLineThickness;
+			left.Y[1] = ((posY + height) * ScaleY) - HalfLineThickness;
+			if (HandyFunction_Clip2DRect(&left, ClipX1, ClipY1, ClipX2, ClipY2) != 0)
+			{
+				numSides++;
+			}
+		}
+
+		Core_Blitter2D_Rect2D_G(rects, numSides);
+	}
+
 	void DrawCountdownOutline(float X1, float Y1, float X2, float Y2, unsigned int color)
 	{
 		const float Scale = GetScaledResolutionWidth();
@@ -2002,9 +2090,12 @@ void OnInitializeHook()
 	{
 		auto draw_2d_box = get_pattern("6A 01 E8 ? ? ? ? 6A 05 E8 ? ? ? ? 6A 06 E8 ? ? ? ? DB 44 24 5C", -5);
 		auto draw_2d_line_from_to = get_pattern("8B 54 24 54 89 44 24 10", -0xB);
+		auto clip_2d_rect = get_pattern("DF E0 25 ? ? ? ? 75 0E D9 41 10 D8 5C 24 10", -0xB);
 
 		HandyFunction_Draw2DBox = reinterpret_cast<decltype(HandyFunction_Draw2DBox)>(draw_2d_box);
 		HandyFunction_Draw2DLineFromTo = reinterpret_cast<decltype(HandyFunction_Draw2DLineFromTo)>(draw_2d_line_from_to);
+		HandyFunction_Clip2DRect = reinterpret_cast<decltype(HandyFunction_Clip2DRect)>(clip_2d_rect);
+
 		HasHandyFunction = true;
 	}
 	TXN_CATCH();
@@ -2482,6 +2573,15 @@ void OnInitializeHook()
 		{
 			InjectHook(::Keyboard_DrawTextEntryBox, BetterBoxDrawing::Keyboard_DrawTextEntryBox, PATCH_JUMP);
 		}
+
+		// Fixed HandyFunction_DrawClipped2DBox requires HandyFunction_Clip2DRect
+		if (HasHandyFunction) try
+		{
+			auto draw_clipped_2d_box = get_pattern("53 55 56 33 F6 3B C6 57 0F 84", -0xA);
+
+			InjectHook(draw_clipped_2d_box, BetterBoxDrawing::HandyFunction_DrawClipped2DBox, PATCH_JUMP);
+		}
+		TXN_CATCH();
 	}
 	TXN_CATCH();
 
