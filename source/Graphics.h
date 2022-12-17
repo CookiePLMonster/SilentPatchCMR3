@@ -133,9 +133,9 @@ struct OSD_Data2
 {
 	int m_TachoX;
 	int m_TachoY;
-	std::byte gap8;
-	char field_9;
-	std::byte gapA[10];
+	int m_TachoWidth;
+	int m_TachoHeight;
+	std::byte gapA[4];
 	int field_14;
 	int field_18;
 	int field_1C;
@@ -318,7 +318,7 @@ uint32_t CMR_GetAnisotropicLevel();
 
 inline const MenuResolutionEntry* (*GetMenuResolutionEntry)(int32_t, int32_t);
 
-//inline int32_t (*GetNumPlayers)();
+inline uint8_t (*GameInfo_GetNumberOfPlayersInThisRace)();
 
 inline Graphics_Config* gGraphicsConfig;
 const Graphics_Config& Graphics_GetCurrentConfig();
@@ -330,6 +330,8 @@ inline D3DViewport** gpCurrentViewport;
 inline D3DPRESENT_PARAMETERS* gd3dPP;
 inline IDirect3DDevice9** gpd3dDevice;
 inline D3DCAPS9* gD3DCaps;
+
+inline OSD_Data2** gpPositionInfoMulti;
 
 float GetScaledResolutionWidth();
 

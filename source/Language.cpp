@@ -40,6 +40,7 @@ const char* Language_GetString(uint32_t ID)
 		{ VSYNC, "VSYNC" },
 		{ ANISOTROPIC, "ANISOTROPIC FILTERING" },
 
+		{ TACHOMETER, "TACHO" },
 		{ EXTERIOR_FOV, "FOV (CHASE)" },
 		{ INTERIOR_FOV, "FOV (INTERIOR)" },
 	};

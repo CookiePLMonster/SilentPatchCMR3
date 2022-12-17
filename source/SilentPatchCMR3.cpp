@@ -883,7 +883,7 @@ namespace ScissorTacho
 				static_cast<LONG>((posX+width) * ScaleX) + viewportOffset, static_cast<LONG>(Graphics_GetScreenHeight()) };
 			device->SetScissorRect(&scissorRect);
 
-			orgHandyFunction_BlitTexture(texture, u1, v1, 128, v2, posX, posY, 128, height, color);
+			orgHandyFunction_BlitTexture(texture, u1, v1, 128, v2, posX, posY, (*gpPositionInfoMulti)->m_TachoWidth, height, color);
 
 			device->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
 		}
@@ -1701,6 +1701,88 @@ namespace NewGraphicsOptions
 		VerticalSplitscreen = CMR_FE_GetVerticalSplitscreen();
 		return IsVerticalSplitscreen();
 	}
+
+	static bool DigitalTacho = false;
+
+	template<std::size_t Index>
+	uint8_t (*orgGameInfo_GetNumberOfPlayersInThisRace)();
+
+	template<std::size_t Index>
+	uint8_t GameInfo_GetNumberOfPlayersInThisRace_DigitalTachoHack()
+	{
+		const uint8_t numPlayers = orgGameInfo_GetNumberOfPlayersInThisRace<Index>();
+		if (numPlayers == 1 && DigitalTacho)
+		{
+			return 2;
+		}
+		return numPlayers;
+	}
+
+	template<std::size_t Ctr, typename Tuple, std::size_t... I, typename Func>
+	void HookEachImpl_GetNumberOfPlayersInThisRace(Tuple&& tuple, std::index_sequence<I...>, Func&& f)
+	{
+		(f(std::get<I>(tuple), orgGameInfo_GetNumberOfPlayersInThisRace<Ctr << 16 | I>, GameInfo_GetNumberOfPlayersInThisRace_DigitalTachoHack<Ctr << 16 | I>), ...);
+	}
+
+	template<std::size_t Ctr = 0, typename Vars, typename Func>
+	void HookEach_GetNumberOfPlayersInThisRace(Vars&& vars, Func&& f)
+	{
+		auto tuple = std::tuple_cat(std::forward<Vars>(vars));
+		HookEachImpl_GetNumberOfPlayersInThisRace<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
+	}
+
+	template<std::size_t Index>
+	bool (*orgGetWidescreen)();
+
+	template<std::size_t Index>
+	bool GetWidesreen_DigitalTachoHack()
+	{
+		// Initialize the option from the first patch
+		if constexpr (Index == 0)
+		{
+			DigitalTacho = CMR_FE_GetDigitalTacho();
+		}
+
+		if (DigitalTacho && GameInfo_GetNumberOfPlayersInThisRace() == 1)
+		{
+			return false;
+		}
+		return orgGetWidescreen<Index>();
+	}
+
+	template<std::size_t Ctr, typename Tuple, std::size_t... I, typename Func>
+	void HookEachImpl_GetWidescreen(Tuple&& tuple, std::index_sequence<I...>, Func&& f)
+	{
+		(f(std::get<I>(tuple), orgGetWidescreen<Ctr << 16 | I>, GetWidesreen_DigitalTachoHack<Ctr << 16 | I>), ...);
+	}
+
+	template<std::size_t Ctr = 0, typename Vars, typename Func>
+	void HookEach_GetWidescreen(Vars&& vars, Func&& f)
+	{
+		auto tuple = std::tuple_cat(std::forward<Vars>(vars));
+		HookEachImpl_GetWidescreen<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
+	}
+
+	static void (*orgDrawTacho)(int playerNo, float);
+	void DrawTacho_SetPosition(int playerNo, float a2)
+	{
+		if (DigitalTacho && GameInfo_GetNumberOfPlayersInThisRace() == 1)
+		{
+			OSD_Data2* PositionInfoMulti = *gpPositionInfoMulti;
+
+			const int OriginalTachoX = std::exchange(PositionInfoMulti->m_TachoX, static_cast<int>(GetScaledResolutionWidth()) - 160);
+			const int OriginalTachoY = std::exchange(PositionInfoMulti->m_TachoY, 310);
+
+			orgDrawTacho(playerNo, a2);
+
+			PositionInfoMulti->m_TachoX = OriginalTachoX;
+			PositionInfoMulti->m_TachoY = OriginalTachoY;
+		}
+		else
+		{
+			orgDrawTacho(playerNo, a2);
+		}
+	}
 }
 
 // Those belong in their cpp files, but they're heavily templated so it's easier to drop them here...
@@ -1964,6 +2046,27 @@ void OnInitializeHook()
 
 		Keyboard_DrawTextEntryBox = reinterpret_cast<decltype(Keyboard_DrawTextEntryBox)>(draw_text_entry_box);
 		HasKeyboard = true;
+	}
+	TXN_CATCH();
+
+	bool HasGameInfo = false;
+	try
+	{
+		auto get_num_players = ReadCallFrom(get_pattern("E8 ? ? ? ? 88 44 24 23"));
+		GameInfo_GetNumberOfPlayersInThisRace = reinterpret_cast<decltype(GameInfo_GetNumberOfPlayersInThisRace)>(get_num_players);
+
+		HasGameInfo = true;
+	}
+	TXN_CATCH();
+
+	bool HasUIPositions = false;
+	try
+	{
+		auto position_into_multi = *get_pattern<OSD_Data2**>("A1 ? ? ? ? 8B 50 60 8B 48 64", 1);
+
+		gpPositionInfoMulti = position_into_multi;
+
+		HasUIPositions = true;
 	}
 	TXN_CATCH();
 
@@ -2330,7 +2433,7 @@ void OnInitializeHook()
 
 
 	// Scissor-based digital tacho
-	if (HasCored3d && HasGraphics && HasViewport) try
+	if (HasCored3d && HasGraphics && HasViewport && HasUIPositions) try
 	{
 		using namespace ScissorTacho;
 
@@ -3293,7 +3396,7 @@ void OnInitializeHook()
 	TXN_CATCH();
 
 	// Additional Graphics options
-	// FOV Control, Split Screen option
+	// FOV Control, Split Screen, Digital tacho
 	// Requires patches: Registry (for saving/loading)
 	if (HasPatches_Registry) try
 	{
@@ -3357,8 +3460,35 @@ void OnInitializeHook()
 		}
 		TXN_CATCH();
 
+		bool HasPatches_DigitalTacho = false;
+		if (HasGameInfo && HasUIPositions && HasGraphics) try
+		{
+			std::array<void*, 5> num_of_players_in_race = {
+				get_pattern("E8 ? ? ? ? 3C 01 75 3D"),
+				get_pattern("E8 ? ? ? ? 3C 02 75 15"),
+				get_pattern("E8 ? ? ? ? 3C 01 75 29"),
+				get_pattern("E8 ? ? ? ? 3C 01 0F 85 ? ? ? ? 6A 01"),
+				get_pattern("E8 ? ? ? ? 3C 02 75 3B 8B 44 24 2C"),
+			};
+
+			std::array<void*, 2> get_widescreen = {
+				get_pattern("E8 ? ? ? ? F6 D8 1B C0 68"),
+				get_pattern("E8 ? ? ? ? F6 D8 1B C0 6A 01 40"),
+			};
+
+			auto draw_tacho = get_pattern("E8 ? ? ? ? 6A 1C");
+
+			HookEach_GetNumberOfPlayersInThisRace(num_of_players_in_race, InterceptCall);
+			HookEach_GetWidescreen(get_widescreen, InterceptCall);
+
+			InterceptCall(draw_tacho, orgDrawTacho, DrawTacho_SetPosition);
+
+			HasPatches_DigitalTacho = true;
+		}
+		TXN_CATCH();
+
 		// Only make frontend changes if all functionality has been successfully patched in
-		if (HasGlobals && HasCMR3FE && HasCMR3Font && HasMenuHook && HasLanguageHook && HasPatches_FOV && HasPatches_SplitScreenOption) try
+		if (HasGlobals && HasCMR3FE && HasCMR3Font && HasMenuHook && HasLanguageHook && HasPatches_FOV && HasPatches_SplitScreenOption && HasPatches_DigitalTacho) try
 		{	
 			void* back_locals[] = {
 				get_pattern("8D 85 ? ? ? ? 50 E8 ? ? ? ? BA", 2),
@@ -3380,7 +3510,7 @@ void OnInitializeHook()
 
 			void** orgJumpTable = *graphics_display_jump_table.get<void**>(9 + 3);
 			static const void* graphics_display_new_jump_table[EntryID::GRAPHICS_NUM] = {
-				orgJumpTable[0], orgJumpTable[1], orgJumpTable[2], orgJumpTable[3],
+				orgJumpTable[0], orgJumpTable[1], orgJumpTable[2], orgJumpTable[3], &PC_GraphicsOptions_Display_CaseNewOptions,
 				&PC_GraphicsOptions_Display_CaseNewOptions, &PC_GraphicsOptions_Display_CaseNewOptions, &PC_GraphicsOptions_Display_CaseNewOptions,
 				orgJumpTable[4], orgJumpTable[5]
 			};
