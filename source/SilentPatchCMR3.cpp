@@ -612,7 +612,7 @@ namespace HalfPixel
 	static void** dword_936C0C;
 
 	static void* Core_Blitter2D_Rect2D_G_JumpBack;
-	__declspec(naked) void Core_Blitter2D_Rect2D_G_Original(float*, uint32_t)
+	__declspec(naked) void Core_Blitter2D_Rect2D_G_Original(BlitRect2D_G*, uint32_t)
 	{
 		__asm
 		{
@@ -623,22 +623,24 @@ namespace HalfPixel
 		}
 	}
 
-	void Core_Blitter2D_Rect2D_G_HalfPixel(float* verts, uint32_t numVerts)
+	void Core_Blitter2D_Rect2D_G_HalfPixel(BlitRect2D_G* verts, uint32_t numVerts)
 	{
 		for (uint32_t i = 0; i < numVerts; i++)
 		{
-			float* vert = &verts[9 * i];
-
-			vert[4] = OffsetTexel(vert[4]);
-			vert[5] = OffsetTexel(vert[5]);
-			vert[6] = OffsetTexel(vert[6]);
-			vert[7] = OffsetTexel(vert[7]);
+			for (float& val : verts[i].X)
+			{
+				val = OffsetTexel(val);
+			}
+			for (float& val : verts[i].Y)
+			{
+				val = OffsetTexel(val);
+			}
 		}
 		Core_Blitter2D_Rect2D_G_Original(verts, numVerts);
 	}
 
 	static void* Core_Blitter2D_Rect2D_GT_JumpBack;
-	__declspec(naked) void Core_Blitter2D_Rect2D_GT_Original(float*, uint32_t)
+	__declspec(naked) void Core_Blitter2D_Rect2D_GT_Original(BlitRect2D_GT*, uint32_t)
 	{
 		__asm
 		{
@@ -649,18 +651,76 @@ namespace HalfPixel
 		}
 	}
 
-	void Core_Blitter2D_Rect2D_GT_HalfPixel(float* verts, uint32_t numRectangles)
+	void Core_Blitter2D_Rect2D_GT_HalfPixel(BlitRect2D_GT* verts, uint32_t numRectangles)
 	{
 		for (uint32_t i = 0; i < numRectangles; i++)
 		{
-			float* vert = &verts[13 * i];
-
-			vert[8] = OffsetTexel(vert[8]);
-			vert[9] = OffsetTexel(vert[9]);
-			vert[10] = OffsetTexel(vert[10]);
-			vert[11] = OffsetTexel(vert[11]);
+			for (float& val : verts[i].X)
+			{
+				val = OffsetTexel(val);
+			}
+			for (float& val : verts[i].Y)
+			{
+				val = OffsetTexel(val);
+			}
 		}
 		Core_Blitter2D_Rect2D_GT_Original(verts, numRectangles);
+	}
+
+	static void* Core_Blitter2D_Quad2D_G_JumpBack;
+	__declspec(naked) void Core_Blitter2D_Quad2D_G_Original(BlitQuad2D_G*, uint32_t)
+	{
+		__asm
+		{
+			sub		esp, 028h
+			mov		eax, dword ptr [dword_936C0C]
+			mov		eax, dword ptr [eax]
+			jmp		[Core_Blitter2D_Quad2D_G_JumpBack]
+		}
+	}
+
+	void Core_Blitter2D_Quad2D_G_HalfPixel(BlitQuad2D_G* quads, uint32_t numQuads)
+	{
+		for (uint32_t i = 0; i < numQuads; i++)
+		{
+			for (float& val : quads[i].X)
+			{
+				val = OffsetTexel(val);
+			}
+			for (float& val : quads[i].Y)
+			{
+				val = OffsetTexel(val);
+			}
+		}
+		Core_Blitter2D_Quad2D_G_Original(quads, numQuads);
+	}
+
+	static void* Core_Blitter2D_Quad2D_GT_JumpBack;
+	__declspec(naked) void Core_Blitter2D_Quad2D_GT_Original(BlitQuad2D_GT*, uint32_t)
+	{
+		__asm
+		{
+			sub		esp, 028h
+			mov		eax, dword ptr [dword_936C0C]
+			mov		eax, dword ptr [eax]
+			jmp		[Core_Blitter2D_Quad2D_GT_JumpBack]
+		}
+	}
+
+	void Core_Blitter2D_Quad2D_GT_HalfPixel(BlitQuad2D_GT* quads, uint32_t numQuads)
+	{
+		for (uint32_t i = 0; i < numQuads; i++)
+		{
+			for (float& val : quads[i].X)
+			{
+				val = OffsetTexel(val);
+			}
+			for (float& val : quads[i].Y)
+			{
+				val = OffsetTexel(val);
+			}
+		}
+		Core_Blitter2D_Quad2D_GT_Original(quads, numQuads);
 	}
 
 	static D3DMATRIX* pViewMatrix;
@@ -2161,6 +2221,8 @@ void OnInitializeHook()
 
 		auto Blitter2D_Rect2D_G = pattern("76 39 8B 7C 24 3C").get_one();
 		auto Blitter2D_Rect2D_GT = reinterpret_cast<intptr_t>(ReadCallFrom(get_pattern("E8 ? ? ? ? A1 ? ? ? ? 45 83 C3 40")));
+		auto Blitter2D_Quad2D_G = reinterpret_cast<intptr_t>(ReadCallFrom(get_pattern("E8 ? ? ? ? 8B 4C 24 1C 8B 44 24 14")));
+		auto Blitter2D_Quad2D_GT = pattern("2B EE 6B F6 54 55 03 F7 56 C7 05").get_one();
 		auto Blitter2D_Line2D_G = pattern("8B 7C 24 28 1B C0").get_one();
 		auto Blitter3D_Line3D_G = pattern("8B 75 0C 8B C2").get_one();
 		auto matrices = pattern("BF ? ? ? ? F3 AB C7 05").get_one();
@@ -2177,6 +2239,12 @@ void OnInitializeHook()
 
 		Core_Blitter2D_Rect2D_GT_JumpBack = reinterpret_cast<void*>(Blitter2D_Rect2D_GT + 8);
 		InjectHook(Blitter2D_Rect2D_GT, Core_Blitter2D_Rect2D_GT_HalfPixel, PATCH_JUMP);
+
+		Core_Blitter2D_Quad2D_G_JumpBack = reinterpret_cast<void*>(Blitter2D_Quad2D_G + 8);
+		InjectHook(Blitter2D_Quad2D_G, Core_Blitter2D_Quad2D_G_HalfPixel, PATCH_JUMP);
+
+		Core_Blitter2D_Quad2D_GT_JumpBack = Blitter2D_Quad2D_GT.get<void>(-0x68 + 8);
+		InjectHook(Blitter2D_Quad2D_GT.get<void>(-0x68), Core_Blitter2D_Quad2D_GT_HalfPixel, PATCH_JUMP);
 
 		Core_Blitter2D_Line2D_G_JumpBack = Blitter2D_Line2D_G.get<void>(-0x17 + 9);
 		InjectHook(Blitter2D_Line2D_G.get<void>(-0x17), Core_Blitter2D_Line2D_G_HalfPixelAndThickness, PATCH_JUMP);

@@ -238,6 +238,15 @@ struct BlitTri3D_G
 };
 static_assert(sizeof(BlitTri3D_G) == 64, "Wrong size: BlitTri3D_G");
 
+struct BlitQuad2D_G
+{
+	uint32_t color[4];
+	float X[4];
+	float Y[4];
+	float Z;
+};
+static_assert(sizeof(BlitQuad2D_G) == 52, "Wrong size: BlitQuad2D_GT");
+
 struct BlitQuad2D_GT
 {
 	uint32_t color[4];
