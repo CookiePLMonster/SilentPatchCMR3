@@ -1295,6 +1295,14 @@ namespace ScaledTexturesSupport
 				{ "osd_glow", { 32, 32 } },
 				{ "rescert", { 128, 32 } },
 				{ "swiss", { 128, 8 } },
+				{ "AUS", { 32, 16 } },
+				{ "FIN", { 32, 16 } },
+				{ "GRE", { 32, 16 } },
+				{ "JAP", { 32, 16 } },
+				{ "SPA", { 32, 16 } },
+				{ "SWE", { 32, 16 } },
+				{ "UK", { 32, 16 } },
+				{ "USA", { 32, 16 } },
 			};
 			auto it = textureDimensions.find(name);
 			if (it != textureDimensions.end())
