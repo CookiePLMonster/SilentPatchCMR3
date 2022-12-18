@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <map>
+#include <string>
 #include <utility>
 #include <vector>
 
@@ -371,6 +372,63 @@ namespace UnrandomizeUnknownCodepoints
 
 	void CMR3Font_SetFontForBlitChar_NOP(uint8_t, uint32_t)
 	{
+	}
+}
+
+namespace SPText
+{
+	static std::string BuildTextInternal()
+	{
+		std::string text("SilentPatch for CMR3 Build ");
+		text.append(std::to_string(rsc_RevisionID));
+#if rsc_BuildID > 0
+		text.append(".");
+		text.append(std::to_string(rsc_BuildID));
+#endif
+		text.append(" (" __DATE__ ")\nDetected executable: ");
+		text.append("UNKNOWN");
+
+		std::string result;
+		std::transform(text.begin(), text.end(), std::back_inserter(result), ::toupper);
+		return result;
+	}
+
+	void DrawSPText(uint32_t color)
+	{
+		const uint32_t alpha = color & 0xFF000000;
+
+		const uint32_t ScreenEdge = static_cast<uint32_t>(GetScaledResolutionWidth());
+		const static std::string DISCLAIMER_TEXT(BuildTextInternal());
+
+		const uint32_t DROP_SHADOW_WIDTH = 1;
+		CMR3Font_BlitText(0, DISCLAIMER_TEXT.c_str(), ScreenEdge - 10 + DROP_SHADOW_WIDTH, 10, alpha, 4);
+		CMR3Font_BlitText(0, DISCLAIMER_TEXT.c_str(), ScreenEdge - 10 - DROP_SHADOW_WIDTH, 10, alpha, 4);
+		CMR3Font_BlitText(0, DISCLAIMER_TEXT.c_str(), ScreenEdge - 10, 10 + DROP_SHADOW_WIDTH, alpha, 4);
+		CMR3Font_BlitText(0, DISCLAIMER_TEXT.c_str(), ScreenEdge - 10, 10 - DROP_SHADOW_WIDTH, alpha, 4);
+		CMR3Font_BlitText(0, DISCLAIMER_TEXT.c_str(), ScreenEdge - 10, 10, color, 4);
+	}
+
+	template<std::size_t Index>
+	void (*orgHandyFunction_BlitTexture)(void* texture, int u1, int v1, float u2, int v2, int posX, int posY, float width, int height, uint32_t color);
+
+	template<std::size_t Index>
+	void HandyFunction_BlitTexture_SPText(void* texture, int u1, int v1, float u2, int v2, int posX, int posY, float width, int height, uint32_t color)
+	{
+		DrawSPText(color);
+		orgHandyFunction_BlitTexture<Index>(texture, u1, v1, u2, v2, posX, posY, width, height, color);
+	}
+
+	template<std::size_t Ctr, typename Tuple, std::size_t... I, typename Func>
+	void HookEachImpl(Tuple&& tuple, std::index_sequence<I...>, Func&& f)
+	{
+		(f(std::get<I>(tuple), orgHandyFunction_BlitTexture<Ctr << 16 | I>, HandyFunction_BlitTexture_SPText<Ctr << 16 | I>), ...);
+	}
+
+	template<std::size_t Ctr = 0, typename Vars, typename Func>
+	void HookEach(Vars&& vars, Func&& f)
+	{
+		auto tuple = std::tuple_cat(std::forward<Vars>(vars));
+		HookEachImpl<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
 	}
 }
 
@@ -3668,6 +3726,22 @@ void OnInitializeHook()
 			Menus::Patches::ExtraGraphicsOptionsPatched = true;
 		}
 		TXN_CATCH();
+	}
+	TXN_CATCH();
+
+
+	// SP text on the Start screen
+	// Make sure this is always the last patch, just in case
+	if (HasGraphics && HasCMR3Font) try
+	{
+		using namespace SPText;
+
+		std::array<void*, 2> texts = {
+			get_pattern("50 E8 ? ? ? ? EB 08", 1),
+			get_pattern("51 E8 ? ? ? ? 5B 83 C4 08", 1)
+		};
+
+		HookEach(texts, InterceptCall);
 	}
 	TXN_CATCH();
 }
