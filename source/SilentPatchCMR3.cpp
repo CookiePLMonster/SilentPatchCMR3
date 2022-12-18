@@ -362,6 +362,18 @@ namespace ConsistentControlsScreen
 	}
 }
 
+namespace UnrandomizeUnknownCodepoints
+{
+	int Random_RandSequence_Fixed(uint32_t)
+	{
+		return 0;
+	}
+
+	void CMR3Font_SetFontForBlitChar_NOP(uint8_t, uint32_t)
+	{
+	}
+}
+
 namespace EnvMapWithSky
 {
 	static bool alwaysDrawSky = true;
@@ -3239,6 +3251,32 @@ void OnInitializeHook()
 		InterceptCall(uppercase_controller_name, orgGetControllerName, GetControllerName_Uppercase);
 
 		HookEach(get_language_sprintf, InterceptCall);
+	}
+	TXN_CATCH();
+
+
+	// "Cut" character flicker for invalid codepoints - let it be ! now
+	try
+	{
+		using namespace UnrandomizeUnknownCodepoints;
+
+		auto rand_sequence1 = pattern("E8 ? ? ? ? 6A 00 88 44 24 20 E8 ? ? ? ? 6A 00 88 44 24 24 E8 ? ? ? ? 25").get_one();
+		void* rand_sequence[] = {
+			rand_sequence1.get<void>(),
+			rand_sequence1.get<void>(0xB),
+			rand_sequence1.get<void>(0x16),
+			get_pattern("89 4C 24 18 E8 ? ? ? ? 8B 4D 00 33 D2", 4),
+		};
+
+		auto set_current_font = pattern("E8 ? ? ? ? 8B 45 04").get_one();
+
+		for (void* addr : rand_sequence)
+		{
+			InjectHook(addr, Random_RandSequence_Fixed);
+		}
+
+		InjectHook(set_current_font.get<void>(), CMR3Font_SetFontForBlitChar_NOP);
+		InjectHook(set_current_font.get<void>(0x2A), CMR3Font_SetFontForBlitChar_NOP);
 	}
 	TXN_CATCH();
 
