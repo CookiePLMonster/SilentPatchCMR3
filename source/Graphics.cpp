@@ -43,7 +43,7 @@ const Graphics_Config& Graphics_GetCurrentConfig()
 
 float GetScaledResolutionWidth()
 {
-	return 480.0f * (static_cast<float>(Graphics_GetScreenWidth()) / Graphics_GetScreenHeight());
+	return UIFullyPatched ? 480.0f * (static_cast<float>(Graphics_GetScreenWidth()) / Graphics_GetScreenHeight()) : 640.0f;
 }
 
 void Core_Texture_SetFilteringMethod(D3DTexture* texture, uint32_t min, uint32_t mag, uint32_t mip)

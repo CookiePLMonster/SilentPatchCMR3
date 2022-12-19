@@ -389,4 +389,6 @@ namespace Graphics::Patches
 	using FloatPatch = std::pair<float*, float>;
 	inline std::vector<std::variant<Int32Patch, FloatPatch>> UI_CenteredElements;
 	inline std::vector<std::variant<Int32Patch, FloatPatch>> UI_RightAlignElements;
+
+	inline bool UIFullyPatched = false;
 }

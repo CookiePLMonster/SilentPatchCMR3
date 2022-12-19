@@ -3214,6 +3214,8 @@ void OnInitializeHook()
 			InjectHook(movie_name_setdir, SetMovieDirectory_SetDimensions);
 
 			OSD_Main_SetUpStructsForWidescreen();
+
+			UIFullyPatched = true;
 		}
 		catch (const hook::txn_exception&)
 		{
