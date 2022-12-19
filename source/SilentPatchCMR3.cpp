@@ -2031,6 +2031,7 @@ void OnInitializeHook()
 	Timers::Setup();
 	Timers::RedirectImports();
 
+	const bool HasRegistry = Registry::Init();
 
 	// Locate globals later patches might rely on
 	bool HasGlobals = false;
@@ -3343,8 +3344,7 @@ void OnInitializeHook()
 
 	// Make the game portable
 	// Removes settings from registry and reliance on INSTALL_PATH
-	bool HasPatches_Registry = false;
-	try
+	if (HasRegistry) try
 	{
 		using namespace Registry;
 		using namespace Patches;
@@ -3369,9 +3369,6 @@ void OnInitializeHook()
 			InjectHook(get_registry_char, GetRegistryChar_Patch, PATCH_JUMP);
 		}
 		TXN_CATCH();
-
-		Registry::Init();
-		HasPatches_Registry = true;
 	}
 	TXN_CATCH();
 
@@ -3387,7 +3384,7 @@ void OnInitializeHook()
 		InterceptCall(render_refmap_sfx_check, orgSfxEnable, SFX_Enable_Force);
 
 		// Only patch the switch if we have registry
-		if (HasPatches_Registry) try
+		if (HasRegistry) try
 		{
 			auto after_setup_texture_stages = get_pattern("DD D8 E8 ? ? ? ? 50 E8", 2);
 
@@ -3401,7 +3398,7 @@ void OnInitializeHook()
 	// Additional Advanced Graphics options
 	// Windowed Mode, VSync, Anisotropic Filtering
 	// Requires patches: Registry (for saving/loading), Core D3D (for resizing windows), Graphics, RenderState (for AF)
-	if (HasPatches_Registry && HasCored3d && HasDestruct && HasGraphics && HasRenderState) try
+	if (HasRegistry && HasCored3d && HasDestruct && HasGraphics && HasRenderState) try
 	{
 		using namespace NewAdvancedGraphicsOptions;
 
@@ -3604,7 +3601,7 @@ void OnInitializeHook()
 	// Additional Graphics options
 	// FOV Control, Split Screen, Digital tacho
 	// Requires patches: Registry (for saving/loading)
-	if (HasPatches_Registry) try
+	if (HasRegistry) try
 	{
 		using namespace NewGraphicsOptions;
 

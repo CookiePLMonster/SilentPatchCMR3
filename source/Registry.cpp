@@ -24,14 +24,22 @@ static std::wstring AnsiToWchar(std::string_view text)
 	return result;
 }
 
-void Registry::Init()
+bool Registry::Init()
 {
 	// Set the INI path to SilentPatchCMR3.ini
 	wil::unique_cotaskmem_string pathToAsi;
 	if (SUCCEEDED(wil::GetModuleFileNameW(wil::GetModuleInstanceHandle(), pathToAsi)))
 	{
-		pathToIni = std::filesystem::path(pathToAsi.get()).replace_extension(L"ini").wstring();
+		try
+		{
+			pathToIni = std::filesystem::path(pathToAsi.get()).replace_extension(L"ini").wstring();
+			return true;
+		}
+		catch (const std::filesystem::filesystem_error&)
+		{
+		}
 	}
+	return false;
 }
 
 std::optional<uint32_t> Registry::GetRegistryDword(const wchar_t* section, const wchar_t* key)

@@ -22,7 +22,7 @@ namespace Registry
 
 	inline const wchar_t* ENVMAP_SKY_KEY_NAME = L"ENVMAP_SKY";
 
-	void Init();
+	bool Init();
 
 	void* GetInstallString_Portable(const char* subkey, const char* value);
 
