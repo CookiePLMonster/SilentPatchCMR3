@@ -294,7 +294,7 @@ void RecalculateUI()
 		auto Protect = ScopedUnprotect::UnprotectSectionOrFullModule(mainModuleInstance, ".text");
 		ScopedUnprotect::Section Protect2(mainModuleInstance, ".rdata");
 	
-		*UI_resolutionWidthMult = gAspectRatioMult / 640.0f;
+		*UI_resolutionWidthMult[0] = *UI_resolutionWidthMult[1] = gAspectRatioMult / 640.0f;
 		*UI_CoutdownPosXVertical[0] = *UI_CoutdownPosXVertical[1] = centeredHalf(146);
 
 		*UI_MenuBarTextDrawLimit = static_cast<int32_t>(ScaledResWidth * 1.4375f + 1.0f); // Original magic constant, 921 for 640px

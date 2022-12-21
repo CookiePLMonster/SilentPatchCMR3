@@ -1704,10 +1704,10 @@ namespace NewAdvancedGraphicsOptions
 	{
 		__asm
 		{
-			push	ebx // onColor
+			push	dword ptr [esp+328h-310h] // onColor
 			push	edi // offColor
 			push	eax // entryID
-			push	ebp // posY
+			push	dword ptr [esp+334h-314h] // posY
 			push	dword ptr [esp+338h+8] // interp
 			push	dword ptr [esp+33Ch+4] // menu
 			call	PC_GraphicsAdvanced_Display_NewOptions
@@ -1824,6 +1824,21 @@ namespace NewGraphicsOptions
 			push	dword ptr [esp+228h-214h] // onColor
 			push	dword ptr [esp+22Ch-218h] // offColor
 			push	ebx // entryID
+			push	dword ptr [esp+234h-208h] // posY
+			push	dword ptr [esp+238h+8] // interp
+			push	dword ptr [esp+23Ch+4] // menu
+			call	PC_GraphicsOptions_Display_NewOptions
+			jmp		[PC_GraphicsOptions_Display_NewOptionsJumpBack]
+		}
+	}
+
+	__declspec(naked) void PC_GraphicsOptions_Display_CaseNewOptions_Czech()
+	{
+		__asm
+		{
+			push	dword ptr [esp+228h-218h] // onColor
+			push	dword ptr [esp+22Ch-214h] // offColor
+			push	eax // entryID
 			push	dword ptr [esp+234h-208h] // posY
 			push	dword ptr [esp+238h+8] // interp
 			push	dword ptr [esp+23Ch+4] // menu
@@ -2090,7 +2105,7 @@ void OnInitializeHook()
 
 		CMR_FE_StoreRegistry = reinterpret_cast<decltype(CMR_FE_StoreRegistry)>(ReadCallFrom(funcs_save.get<void>(-0xB)));
 
-		SetUseLowQualityTextures = reinterpret_cast<decltype(SetUseLowQualityTextures)>(ReadCallFrom(get_pattern("E8 ? ? ? ? 8D 94 24 ? ? ? ? C7 05")));
+		SetUseLowQualityTextures = reinterpret_cast<decltype(SetUseLowQualityTextures)>(ReadCallFrom(get_pattern("F6 D8 1B C0 40 50 E8 ? ? ? ? E8", 6)));
 
 		DrawLeftRightArrows = reinterpret_cast<decltype(DrawLeftRightArrows)>(get_pattern("81 EC ? ? ? ? 0F BF 41 18", -8));
 
@@ -2102,7 +2117,7 @@ void OnInitializeHook()
 	try
 	{
 		CMR3Font_BlitText = reinterpret_cast<decltype(CMR3Font_BlitText)>(get_pattern("8B 74 24 30 8B 0D", -6));
-		CMR3Font_GetTextWidth = reinterpret_cast<decltype(CMR3Font_GetTextWidth)>(get_pattern("83 EC 20 8B 44 24 24"));
+		CMR3Font_GetTextWidth = reinterpret_cast<decltype(CMR3Font_GetTextWidth)>(get_pattern("25 FF 00 00 00 55 56 57 8D 0C C5 00 00 00 00", -0xD));
 
 		HasCMR3Font = true;
 	}
@@ -2114,9 +2129,21 @@ void OnInitializeHook()
 		auto set_gamma_ramp = get_pattern("D9 44 24 08 81 EC");
 		auto get_num_adapters = ReadCallFrom(get_pattern("E8 ? ? ? ? 8B F8 32 DB"));
 		auto get_current_config = reinterpret_cast<uintptr_t>(ReadCallFrom(get_pattern("E8 ? ? ? ? 51 8B 7C 24 68")));
-		auto check_for_vertex_shaders = get_pattern("81 EC ? ? ? ? 8D 8C 24", -4);
+		auto check_for_vertex_shaders = [] {
+			try
+			{
+				return get_pattern("81 EC ? ? ? ? 8D 8C 24", -4);
+			}
+			catch (const hook::txn_exception&)
+			{
+				// Czech EXE has a bigger stack in this function
+				return get_pattern("81 EC ? ? ? ? 8D 4C 24 00 56", -4);
+			}
+		}();
+
 		auto setup_render = get_pattern("81 EC ? ? ? ? 56 8D 44 24 08");
 		auto get_adapter_caps = get_pattern("8B 08 81 EC ? ? ? ? 56", -5);
+		auto get_resolution_entry = ReadCallFrom(get_pattern("A1 ? ? ? ? 52 50 E8 ? ? ? ? 8B F0 56", 7));
 
 		auto save_func = pattern("E8 ? ? ? ? 8B 0D ? ? ? ? 6A FF 51 8B F8 E8").get_one();
 		auto get_modes = pattern("E8 ? ? ? ? 33 F6 85 C0 89 44 24 14").get_one();
@@ -2131,10 +2158,10 @@ void OnInitializeHook()
 
 		Graphics_GetScreenWidth = reinterpret_cast<decltype(Graphics_GetScreenWidth)>(get_screen_width);
 		Graphics_GetScreenHeight = reinterpret_cast<decltype(Graphics_GetScreenHeight)>(get_screen_height);
+		GetMenuResolutionEntry = reinterpret_cast<decltype(GetMenuResolutionEntry)>(get_resolution_entry);
 
 		CMR_GetAdapterProductID = reinterpret_cast<decltype(CMR_GetAdapterProductID)>(ReadCallFrom(save_func.get<void>(0)));
 		CMR_GetAdapterVendorID = reinterpret_cast<decltype(CMR_GetAdapterVendorID)>(ReadCallFrom(save_func.get<void>(0x10)));
-		GetMenuResolutionEntry = reinterpret_cast<decltype(GetMenuResolutionEntry)>(ReadCallFrom(save_func.get<void>(0x26)));
 
 		CMR_GetValidModeIndex = reinterpret_cast<decltype(CMR_GetValidModeIndex)>(get_modes.get<void>(-9));
 		CMR_ValidateModeFormats = reinterpret_cast<decltype(CMR_ValidateModeFormats)>(ReadCallFrom(get_modes.get<void>(0)));
@@ -2248,8 +2275,7 @@ void OnInitializeHook()
 		std::array<void*, 3> load_texture = {
 			get_pattern("E8 ? ? ? ? 89 06 5E C2 0C 00"),
 			get_pattern("E8 ? ? ? ? 56 89 07"),
-			[]
-			{
+			[] {
 				try
 				{
 					// Polish/EFIGS
@@ -2386,13 +2412,34 @@ void OnInitializeHook()
 
 		auto menus = *get_pattern<MenuDefinition*>("C7 05 ? ? ? ? ? ? ? ? 89 3D ? ? ? ? 89 35", 2+4);
 		std::array<void*, 3> update_menu_entries = {
-			get_pattern("6A 01 E8 ? ? ? ? 5F 5E C2 08 00", 2),
+			[] {
+				try
+				{
+					// EFIGS/Polish
+					return get_pattern("6A 01 E8 ? ? ? ? 5F 5E C2 08 00", 2);
+				}
+				catch (const hook::txn_exception&)
+				{
+					// Czech
+					return get_pattern("6A 01 E8 ? ? ? ? 8B 54 24 10", 2);
+				}
+			}(),
 			get_pattern("E8 ? ? ? ? 6A 00 E8 ? ? ? ? E8 ? ? ? ? C2 08 00", 5 + 2),
 			get_pattern("E8 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? 50 E8 ? ? ? ? 50"),
 		};
 
 		gnCurrentAdapter = *get_pattern<int*>("A3 ? ? ? ? 56 50", 1);
-		PC_GraphicsAdvanced_PopulateFromCaps = reinterpret_cast<decltype(PC_GraphicsAdvanced_PopulateFromCaps)>(get_pattern("8D 84 24 ? ? ? ? 53 55", -6));
+		PC_GraphicsAdvanced_PopulateFromCaps = reinterpret_cast<decltype(PC_GraphicsAdvanced_PopulateFromCaps)>([] {
+			try
+			{
+				return get_pattern("8D 84 24 ? ? ? ? 53 55", -6);
+			}
+			catch (const hook::txn_exception&)
+			{
+				// Czech EXE has a bigger stack in this function
+				return get_pattern("8D 44 24 ? 53 55 8B AC 24", -6);
+			}
+		}());
 
 		gmoFrontEndMenus = menus;
 		HookEach(update_menu_entries, InterceptCall);
@@ -2494,7 +2541,7 @@ void OnInitializeHook()
 		using namespace ResolutionsList;
 
 		auto check_aspect_ratio = get_pattern("8D 04 40 3B C2 74 05", 5);
-		auto get_display_mode_count = get_pattern("E8 ? ? ? ? 33 C9 3B C1 89 44 24 1C");
+		auto get_display_mode_count = get_pattern("55 E8 ? ? ? ? 33 C9 3B C1 89 44 24", 1);
 
 		// Populate the list of addresses to patch with addresses and offsets
 		// Those act as "optional", don't fail the entire change if any patterns fail
@@ -2756,10 +2803,15 @@ void OnInitializeHook()
 				});
 			};
 
-			float* resolutionWidthMult = *get_pattern<float*>("DF 6C 24 18 D8 0D ? ? ? ? D9 5C 24 38", 4+2);
-			if (mainModuleInstance == GetModuleHandleFromAddress(resolutionWidthMult))
+			float* resolutionWidthMult1 = *get_pattern<float*>("DF 6C 24 18 D8 0D ? ? ? ? D9 5C 24 38", 4+2);
+			if (mainModuleInstance == GetModuleHandleFromAddress(resolutionWidthMult1))
 			{
-				UI_resolutionWidthMult = resolutionWidthMult;
+				UI_resolutionWidthMult[0] = resolutionWidthMult1;
+			}
+			float* resolutionWidthMult2 = *get_pattern<float*>("DF 6C 24 08 D8 0D ? ? ? ? D9 5C 24 14", 4+2);
+			if (mainModuleInstance == GetModuleHandleFromAddress(resolutionWidthMult2))
+			{
+				UI_resolutionWidthMult[1] = resolutionWidthMult2;
 			}
 			UI_RightAlignElements.emplace_back(std::in_place_type<FloatPatch>, *get_pattern<float*>("D8 3D ? ? ? ? D9 5C 24 18", 2), 640.0f);
 
@@ -2858,7 +2910,7 @@ void OnInitializeHook()
 			};
 
 			// Stage loading background tiles
-			UI_RightAlignElements.emplace_back(std::in_place_type<FloatPatch>, get_pattern<float>("C7 44 24 ? ? ? ? ? 89 44 24 3C 89 44 24 38", 4), 640.0f);
+			UI_RightAlignElements.emplace_back(std::in_place_type<FloatPatch>, get_pattern<float>("C7 44 24 ? ? ? ? ? 89 44 24 3C 89 44 24 38 D8 0D", 4), 640.0f);
 			UI_RightAlignElements.emplace_back(std::in_place_type<FloatPatch>, get_pattern<float>("DF 6C 24 78 C7 44 24", 4+4), 640.0f);
 
 			// CMR3 logo in menus
@@ -2873,35 +2925,94 @@ void OnInitializeHook()
 			auto post_race_certina_logos4 = pattern("E8 ? ? ? ? 68 DA 00 00 00 E8").count(1);
 			auto post_race_flags = pattern("E8 ? ? ? ? 83 ? ? 8B 54 24 ? 42").count(2);
 			patch_field("68 34 02 00 00", 1); // push 564
+
+			std::vector<void*> centered_blit_texts, right_blit_texts;
 			
-			auto post_race_centered_texts1 = pattern("68 40 01 00 00 68 ? ? ? ? E8 ? ? ? ? 50 6A 00 E8 ? ? ? ? 5F 5E").count(6);
-			auto post_race_centered_texts2 = pattern("68 40 01 00 00 68 ? ? ? ? E8 ? ? ? ? 50 6A 00 E8 ? ? ? ? 5E 5D").count(1);
-			auto post_race_right_texts1 = pattern("6A 00 E8 ? ? ? ? ? 83 ? 06").count(2);
-			auto post_race_right_texts2 = pattern("68 ? ? ? ? 68 ? ? ? ? 6A 0C E8 ? ? ? ? 8B 74 24 ? 8B 7C 24").count(2);
-			auto post_race_right_texts3 = pattern("68 17 02 00 00 68 ? ? ? ? 6A 0C E8").count(4);
+			// Post-race texts
+			pattern("68 40 01 00 00 68 ? ? ? ? E8 ? ? ? ? 50 6A 00 E8 ? ? ? ? 5F 5E").count_hint(6).for_each_result([&](pattern_match match)
+				{ // 6 in EFIGS/Polish, 4 in Czech
+					centered_blit_texts.emplace_back(match.get<void>(18));
+				});
+			pattern("68 40 01 00 00 68 ? ? ? ? E8 ? ? ? ? 50 53 E8 ? ? ? ? 5D 5B").count_hint(2).for_each_result([&](pattern_match match)
+				{ // 0 in EFIGS/Polish, 2 in Czech
+					centered_blit_texts.emplace_back(match.get<void>(17));
+				});
+			pattern("68 40 01 00 00 68 ? ? ? ? E8 ? ? ? ? 50 6A 00 E8 ? ? ? ? 5E 5D").count_hint(1).for_each_result([&](pattern_match match)
+				{ // 1 in EFIGS/Polish, 0 in Czech
+					centered_blit_texts.emplace_back(match.get<void>(18));
+				});
+			pattern("68 40 01 00 00 68 ? ? ? ? E8 ? ? ? ? 50 6A 00 E8").count_hint(1).for_each_result([&](pattern_match match)
+				{ // 0 in EFIGS/Polish, 1 in Czech
+					centered_blit_texts.emplace_back(match.get<void>(17));
+				});
+	
+
+			pattern("6A 00 E8 ? ? ? ? ? 83 ? 06").count(2).for_each_result([&](pattern_match match)
+				{
+					right_blit_texts.emplace_back(match.get<void>(2));
+				});
+			pattern("68 ? ? ? ? 68 ? ? ? ? 6A 0C E8 ? ? ? ? 8B 74 24 ? 8B 7C 24").count_hint(2).for_each_result([&](pattern_match match)
+				{ // 2 in Polish/EFIGS, 0 in Czech
+					right_blit_texts.emplace_back(match.get<void>(12));
+				});
+			pattern("68 ? ? ? ? 68 ? ? ? ? 6A 0C E8 ? ? ? ? 8B 44 24 ? 8B 7C 24").count_hint(2).for_each_result([&](pattern_match match)
+				{ // 0 in Polish/EFIGS, 2 in Czech
+					right_blit_texts.emplace_back(match.get<void>(12));
+				});
+			pattern("68 17 02 00 00 68 ? ? ? ? 6A 0C E8").count(4).for_each_result([&](pattern_match match)
+				{
+					right_blit_texts.emplace_back(match.get<void>(12));
+				});
 			
 			// Time trial texts need a range check
-			auto post_race_right_texts4 = pattern(get_pattern_uintptr("53 55 56 E8 ? ? ? ? D9 84 24 ? ? ? ? D8 0D"),
-												post_race_centered_texts2.get_one().get_uintptr(),
-												"E8 ? ? ? ? 46 83 FE").count(5);
+			pattern(reinterpret_cast<uintptr_t>(ReadCallFrom(get_pattern("E8 ? ? ? ? EB 0F 8B 54 24 08"))),
+												get_pattern_uintptr("8B 4C 24 08 56 8B 41 10"),
+												"E8 ? ? ? ? 46 83 FE").count(5).for_each_result([&](pattern_match match)
+				{
+					right_blit_texts.emplace_back(match.get<void>());
+				});
 
 			// Shakedown
-			auto post_race_right_texts5 = pattern("E8 ? ? ? ? 46 83 FE 03 7C 9A").count(1);
-			auto post_race_right_texts6 = pattern("68 7B 01 00 00 68 ? ? ? ? 55 E8").count(3);
-			auto post_race_right_texts7 = pattern("68 C9 01 00 00 68 ? ? ? ? 6A 0C E8").count(3);
+			pattern("E8 ? ? ? ? 46 83 FE 03 7C 9A").count(1).for_each_result([&](pattern_match match)
+				{
+					right_blit_texts.emplace_back(match.get<void>());
+				});
+			pattern("68 7B 01 00 00 68 ? ? ? ? 55 E8").count(3).for_each_result([&](pattern_match match)
+				{
+					right_blit_texts.emplace_back(match.get<void>(11));
+				});
+			pattern("68 C9 01 00 00 68 ? ? ? ? 6A 0C E8").count(3).for_each_result([&](pattern_match match)
+				{
+					right_blit_texts.emplace_back(match.get<void>(12));
+				});
 
 			// Stages high scores
 			auto stages_highscores_begin = get_pattern_uintptr("53 55 56 57 33 FF 89 7C 24 14");
 			auto stages_highscores_end = get_pattern_uintptr("0F 82 ? ? ? ? 6A 00 6A 00 6A 00 6A 00");
-			auto stages_highscores_centered_texts1 = pattern(stages_highscores_begin, stages_highscores_end, "68 ? ? ? ? 57 E8");
-			auto stages_highscores_centered_texts2 = pattern(stages_highscores_begin, stages_highscores_end, "6A 00 E8");
-			auto stages_highscores_centered_texts3 = pattern(stages_highscores_begin, stages_highscores_end, "6A 0C E8");
+			pattern(stages_highscores_begin, stages_highscores_end, "68 ? ? ? ? 57 E8").for_each_result([&](pattern_match match)
+				{
+					centered_blit_texts.emplace_back(match.get<void>(6));
+				});
+			pattern(stages_highscores_begin, stages_highscores_end, "6A 00 E8").for_each_result([&](pattern_match match)
+				{
+					centered_blit_texts.emplace_back(match.get<void>(2));
+				});
+			pattern(stages_highscores_begin, stages_highscores_end, "6A 0C E8").for_each_result([&](pattern_match match)
+				{
+					centered_blit_texts.emplace_back(match.get<void>(2));
+				});
 
 			// Championship high scores
 			auto championship_highscores_begin = get_pattern_uintptr("53 55 56 57 E8 ? ? ? ? 25");
 			auto championship_highscores_end = get_pattern_uintptr("81 FF ? ? ? ? 0F 8C ? ? ? ? 6A 00");
-			auto championship_highscores_centered_texts1 = pattern(championship_highscores_begin, championship_highscores_end, "6A 00 E8");
-			auto championship_highscores_centered_texts2 = pattern(championship_highscores_begin, championship_highscores_end, "6A 0C E8");
+			pattern(championship_highscores_begin, championship_highscores_end, "6A 00 E8").for_each_result([&](pattern_match match)
+				{
+					centered_blit_texts.emplace_back(match.get<void>(2));
+				});
+			pattern(championship_highscores_begin, championship_highscores_end, "6A 0C E8").for_each_result([&](pattern_match match)
+				{
+					centered_blit_texts.emplace_back(match.get<void>(2));
+				});
 
 			// OSD keyboard
 			auto osd_keyboard_draw_text_entry_box1 = pattern("E8 ? ? ? ? 50 6A 1F 68 ? ? ? ? 68 ? ? ? ? 68 ? ? ? ? E8").count(3);
@@ -2930,8 +3041,14 @@ void OnInitializeHook()
 			// The amount of texts to patch differs between executables, so a range check is needed
 			auto secrets_begin = pattern("C7 05 ? ? ? ? 80 02 00 00 D9 44 24 20").get_one();
 			auto secrets_end = get_pattern_uintptr("89 44 24 1C 3B FA");
-			auto secrets_centered_texts1 = pattern(secrets_begin.get_uintptr(), secrets_end, "68 40 01 00 00 68 ? ? ? ? E8 ? ? ? ? 50 6A ? E8");
-			auto secrets_centered_texts2 = pattern(secrets_begin.get_uintptr(), secrets_end, "68 40 01 00 00 68 ? ? ? ? 6A ? E8");
+			pattern(secrets_begin.get_uintptr(), secrets_end, "68 40 01 00 00 68 ? ? ? ? E8 ? ? ? ? 50 6A ? E8").for_each_result([&](pattern_match match)
+				{
+					centered_blit_texts.emplace_back(match.get<void>(18));
+				});
+			pattern(secrets_begin.get_uintptr(), secrets_end, "68 40 01 00 00 68 ? ? ? ? 6A ? E8").for_each_result([&](pattern_match match)
+				{
+					centered_blit_texts.emplace_back(match.get<void>(12));
+				});
 
 			UI_RightAlignElements.emplace_back(std::in_place_type<Int32Patch>, secrets_begin.get<int32_t>(6), 640);
 			UI_RightAlignElements.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("C7 05 ? ? ? ? ? ? ? ? E8 ? ? ? ? 68 ? ? ? ? 55", 6), 640); 
@@ -2996,13 +3113,22 @@ void OnInitializeHook()
 				using namespace SolidRectangleWidthHack;
 
 				auto draw_solid_background = pattern("DB 44 24 5C 8B 44 24 6C").get_one();
-				auto set_string_extents = pattern("56 83 F8 FE 57").get_one();
+				std::optional<pattern_match> set_string_extents;
+				try
+				{
+					// Czech EXE matches on the original pattern too, but does it 1 byte too "early"
+					set_string_extents.emplace(pattern("55 56 83 F8 FE 57").get_one());
+				}
+				catch (const hook::txn_exception&)
+				{
+					set_string_extents.emplace(pattern("56 83 F8 FE 57").get_one());
+				}
 
 				InjectHook(draw_solid_background.get<void>(-0x1A), HandyFunction_Draw2DBox_Hack, PATCH_JUMP);
 				HandyFunction_Draw2DBox_JumpBack = draw_solid_background.get<void>(-0x1A + 5);
 
-				InjectHook(set_string_extents.get<void>(-6), CMR3Font_SetViewport_Hack, PATCH_JUMP);
-				CMR3Font_SetViewport_JumpBack = set_string_extents.get<void>(-6 + 5);
+				InjectHook(set_string_extents->get<void>(-5), CMR3Font_SetViewport_Hack, PATCH_JUMP);
+				CMR3Font_SetViewport_JumpBack = set_string_extents->get<void>(-5 + 5);
 			}
 
 			HookEach_RecalculateUI(graphics_change_recalculate_ui, InterceptCall);
@@ -3073,63 +3199,6 @@ void OnInitializeHook()
 			{
 				InjectHook(match.get<void>(), Core_Blitter2D_Rect2D_GT_RightAlign);
 			});
-			post_race_centered_texts1.for_each_result([](pattern_match match)
-			{
-				InjectHook(match.get<void>(18), CMR3Font_BlitText_Center);
-			});
-			post_race_centered_texts2.for_each_result([](pattern_match match)
-			{
-				InjectHook(match.get<void>(18), CMR3Font_BlitText_Center);
-			});
-			post_race_right_texts1.for_each_result([](pattern_match match)
-			{
-				InjectHook(match.get<void>(2), CMR3Font_BlitText_RightAlign);
-			});
-			post_race_right_texts2.for_each_result([](pattern_match match)
-			{
-				InjectHook(match.get<void>(12), CMR3Font_BlitText_RightAlign);
-			});
-			post_race_right_texts3.for_each_result([](pattern_match match)
-			{
-				InjectHook(match.get<void>(12), CMR3Font_BlitText_RightAlign);
-			});
-			post_race_right_texts4.for_each_result([](pattern_match match)
-			{
-				InjectHook(match.get<void>(), CMR3Font_BlitText_RightAlign);
-			});
-			post_race_right_texts5.for_each_result([](pattern_match match)
-			{
-				InjectHook(match.get<void>(), CMR3Font_BlitText_RightAlign);
-			});
-			post_race_right_texts6.for_each_result([](pattern_match match)
-			{
-				InjectHook(match.get<void>(11), CMR3Font_BlitText_RightAlign);
-			});
-			post_race_right_texts7.for_each_result([](pattern_match match)
-			{
-				InjectHook(match.get<void>(12), CMR3Font_BlitText_RightAlign);
-			});
-
-			stages_highscores_centered_texts1.for_each_result([](pattern_match match)
-			{
-				InjectHook(match.get<void>(6), CMR3Font_BlitText_Center);
-			});
-			stages_highscores_centered_texts2.for_each_result([](pattern_match match)
-			{
-				InjectHook(match.get<void>(2), CMR3Font_BlitText_Center);
-			});
-			stages_highscores_centered_texts3.for_each_result([](pattern_match match)
-			{
-				InjectHook(match.get<void>(2), CMR3Font_BlitText_Center);
-			});
-			championship_highscores_centered_texts1.for_each_result([](pattern_match match)
-			{
-				InjectHook(match.get<void>(2), CMR3Font_BlitText_Center);
-			});
-			championship_highscores_centered_texts2.for_each_result([](pattern_match match)
-			{
-				InjectHook(match.get<void>(2), CMR3Font_BlitText_Center);
-			});
 
 			osd_keyboard_draw_text_entry_box1.for_each_result([](pattern_match match)
 			{
@@ -3177,15 +3246,6 @@ void OnInitializeHook()
 				InjectHook(match.get<void>(11), Core_Blitter2D_Line2D_G_Center);
 			});
 
-			secrets_centered_texts1.for_each_result([](pattern_match match)
-			{
-				InjectHook(match.get<void>(18), CMR3Font_BlitText_Center);
-			});
-			secrets_centered_texts2.for_each_result([](pattern_match match)
-			{
-				InjectHook(match.get<void>(12), CMR3Font_BlitText_Center);
-			});
-
 			for (void* addr : settings_reset_dialog_backgrounds)
 			{
 				InjectHook(addr, Core_Blitter2D_Rect2D_G_Center);
@@ -3208,6 +3268,15 @@ void OnInitializeHook()
 			{
 				InjectHook(match.get<void>(7), HandyFunction_Draw2DLineFromTo_Center);
 			});
+
+			for (void* addr : centered_blit_texts)
+			{
+				InjectHook(addr, CMR3Font_BlitText_Center);
+			}
+			for (void* addr : right_blit_texts)
+			{
+				InjectHook(addr, CMR3Font_BlitText_RightAlign);
+			}
 
 			InjectHook(splitscreen_4th_viewport_rect2d, Core_Blitter2D_Rect2D_GT_CenterHalf);
 			
@@ -3260,8 +3329,7 @@ void OnInitializeHook()
 		Patch(draw_2d_box.get<void>(), { 0xFF, 0x74, 0x24, 0x38 });
 		Patch<int8_t>(draw_2d_box.get<void>(10 + 3), 0x118 - 0xDC);
 
-		ReadCall(draw_2d_box.get<void>(18), orgHandyFunction_Draw2DBox);
-		InjectHook(draw_2d_box.get<void>(18), Draw2DBox_HackedAlpha);
+		InterceptCall(draw_2d_box.get<void>(18), orgHandyFunction_Draw2DBox, Draw2DBox_HackedAlpha);
 	}
 	TXN_CATCH();
 
@@ -3329,15 +3397,15 @@ void OnInitializeHook()
 			get_pattern("89 4C 24 18 E8 ? ? ? ? 8B 4D 00 33 D2", 4),
 		};
 
-		auto set_current_font = pattern("E8 ? ? ? ? 8B 45 04").get_one();
+		auto set_current_font = pattern("8B 44 24 24 8B 4C 24 34 50 51 E8").get_one();
 
 		for (void* addr : rand_sequence)
 		{
 			InjectHook(addr, Random_RandSequence_Fixed);
 		}
 
-		InjectHook(set_current_font.get<void>(), CMR3Font_SetFontForBlitChar_NOP);
-		InjectHook(set_current_font.get<void>(0x2A), CMR3Font_SetFontForBlitChar_NOP);
+		InjectHook(set_current_font.get<void>(0xA), CMR3Font_SetFontForBlitChar_NOP);
+		InjectHook(set_current_font.get<void>(0x34), CMR3Font_SetFontForBlitChar_NOP);
 	}
 	TXN_CATCH();
 
@@ -3365,7 +3433,7 @@ void OnInitializeHook()
 		// This one is optional! Polish exe lacks it
 		try
 		{
-			auto get_registry_char = get_pattern("75 5F 8B 4C 24 14", -0x21);
+			auto get_registry_char = get_pattern("85 C0 75 ? 8B 4C 24 14 56 8B 74 24 1C 8D 54 24 04 57", -0x1F);
 			InjectHook(get_registry_char, GetRegistryChar_Patch, PATCH_JUMP);
 		}
 		TXN_CATCH();
@@ -3431,7 +3499,7 @@ void OnInitializeHook()
 			};
 
 			auto set_window_pos_adjust = pattern("50 FF 15 ? ? ? ? A1 ? ? ? ? 8B 0D ? ? ? ? 89 44 24 0C").get_one();
-			auto disable_gamma_for_window = get_pattern("E8 ? ? ? ? B9 ? ? ? ? 8B F0 8D 7C 24 10 F3 A5 8D 8C 24");
+			auto disable_gamma_for_window = get_pattern("56 57 55 50 E8 ? ? ? ? B9 4C 00 00 00", 4);
 
 			ghInstance = *get_pattern<HINSTANCE*>("89 3D ? ? ? ? 89 44 24 14", 2);
 
@@ -3475,15 +3543,41 @@ void OnInitializeHook()
 			auto graphics_advanced_select = get_pattern("50 E8 ? ? ? ? 8B 0D ? ? ? ? 8B 74 24 58", -0xD);
 
 			auto advanced_graphics_load_settings = get_pattern("83 EC 58 53 55 56 57 6A 00 68");
-			auto advanced_graphics_save_settings = get_pattern("83 EC 2C A1 ? ? ? ? 53 56 57 6A FF 50");
+			auto advanced_graphics_save_settings = ReadCallFrom(get_pattern("E8 ? ? ? ? 8B 44 24 04 8B 08"));
 
 			auto set_graphics_from_preset = get_pattern("25 ? ? ? ? 33 C9 2B C1", -6);
 
-			auto advanced_graphics_display_jump_table = pattern("8B DF 83 F8 ? 0F 87").get_one();
+			auto advanced_graphics_display_jump_table = pattern("89 7C 24 18 8B ? 83 F8 ? 0F 87").get_one();
 
 			auto advanced_graphics_texture_quality_display_value = get_pattern("8B 86 ? ? ? ? 81 C7 ? ? ? ? 83 E8 00 74 0A", 2);
-			auto advanced_graphics_envmap_display = pattern("8A 86 ? ? ? ? 8B 8C 24").get_one();
-			auto advanced_graphics_shadows_display = pattern("8A 8E ? ? ? ? 8B 94 24").get_one();
+
+			std::vector<std::pair<void*, size_t>> menu_locals;
+
+			// These are byte accesses in EFIGS/Polish EXEs, but dword accesses in the Czech EXE
+			try
+			{
+				auto envmap = pattern("8A 86 ? ? ? ? 8B 8C 24").get_one();
+				auto shadows = pattern("8A 8E ? ? ? ? 8B 94 24").get_one();
+
+				menu_locals.emplace_back(envmap.get<void>(2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_visibilityAndName) + 3);
+				menu_locals.emplace_back(envmap.get<void>(6 + 7 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_value));
+
+				menu_locals.emplace_back(shadows.get<void>(2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_visibilityAndName) + 3);
+				menu_locals.emplace_back(shadows.get<void>(6 + 7 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_value));
+
+			}
+			catch (const hook::txn_exception&)
+			{
+				auto envmap = pattern("8B 86 ? ? ? ? 8B 8C 24").get_one();
+				auto shadows = pattern("8B 8E ? ? ? ? 8B 94 24").get_one();
+
+				menu_locals.emplace_back(envmap.get<void>(2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_visibilityAndName));
+				menu_locals.emplace_back(envmap.get<void>(6 + 7 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_value));
+
+				menu_locals.emplace_back(shadows.get<void>(2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_visibilityAndName));
+				menu_locals.emplace_back(shadows.get<void>(6 + 7 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_value));
+			}
+
 			auto advanced_graphics_draw_distance_display = pattern("8B 8E ? ? ? ? 8B F8 81 C7").get_one();
 			auto advanced_graphics_gamma_display = pattern("8B 86 ? ? ? ? 81 C7 ? ? ? ? 40").get_one();
 			auto advanced_graphics_fsaa_display_value = get_pattern("8B 96 ? ? ? ? 8B 40 4C", 2);
@@ -3501,21 +3595,75 @@ void OnInitializeHook()
 				get_pattern("A1 ? ? ? ? 89 7C 24 20", 1),
 			};
 
-			void* gamma_locals_value[] = {
-				get_pattern("51 8B 7C 24 68 DB 87", 1 + 4 + 2),
-			};
+			menu_locals.emplace_back(get_pattern("51 8B 7C 24 68 DB 87", 1 + 4 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_value));
 
-			auto fsaa_on_adapter_change = pattern("8B 83 ? ? ? ? 7F 0A").get_one();
-			auto envmap_on_adapter_change1 = get_pattern("89 15 ? ? ? ? 8D 84 24", -6 + 2);
-			auto envmap_on_adapter_change2 = pattern("8B 83 ? ? ? ? 75 22").get_one();
-			auto shadows_on_adapter_change = pattern("89 15 ? ? ? ? 85 84 24").get_one();
+			try
+			{
+				// EFIGS/Polish
+				auto fsaa_on_adapter_change = pattern("8B 83 ? ? ? ? 7F 0A").get_one();
+				auto envmap_on_adapter_change1 = get_pattern("89 15 ? ? ? ? 8D 84 24", -6 + 2);
+				auto envmap_on_adapter_change2 = pattern("8B 83 ? ? ? ? 75 22").get_one();
+				auto shadows_on_adapter_change = pattern("89 15 ? ? ? ? 85 84 24").get_one();
+
+				menu_locals.emplace_back(fsaa_on_adapter_change.get<void>(-6 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_FSAA].m_entryDataInt));
+				menu_locals.emplace_back(fsaa_on_adapter_change.get<void>(0 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_FSAA].m_visibilityAndName));
+				menu_locals.emplace_back(fsaa_on_adapter_change.get<void>(8 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_FSAA].m_value));
+				menu_locals.emplace_back(fsaa_on_adapter_change.get<void>(0x17 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_FSAA].m_visibilityAndName));
+
+				menu_locals.emplace_back(envmap_on_adapter_change1, offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_value));
+
+				menu_locals.emplace_back(envmap_on_adapter_change2.get<void>(0 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_visibilityAndName));
+				menu_locals.emplace_back(envmap_on_adapter_change2.get<void>(0xF + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_value));
+				menu_locals.emplace_back(envmap_on_adapter_change2.get<void>(0x19 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_visibilityAndName));
+				menu_locals.emplace_back(envmap_on_adapter_change2.get<void>(0x37 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_value));
+				menu_locals.emplace_back(envmap_on_adapter_change2.get<void>(0x37 + 6 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_visibilityAndName));
+
+				menu_locals.emplace_back(shadows_on_adapter_change.get<void>(-6 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_value));
+				menu_locals.emplace_back(shadows_on_adapter_change.get<void>(0xF + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_visibilityAndName));
+				menu_locals.emplace_back(shadows_on_adapter_change.get<void>(0xF + 6 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_value));
+				menu_locals.emplace_back(shadows_on_adapter_change.get<void>(0x2B + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_value));
+				menu_locals.emplace_back(shadows_on_adapter_change.get<void>(0x31 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_visibilityAndName));
+				menu_locals.emplace_back(shadows_on_adapter_change.get<void>(0x41 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_visibilityAndName));
+			}
+			catch (const hook::txn_exception&)
+			{
+				// Czech
+				auto fsaa_on_adapter_change = pattern("8B 83 ? ? ? ? 7E 0D").get_one();
+				auto envmap_on_adapter_change1 = get_pattern("89 15 ? ? ? ? 8D 44 24", -6 + 2);
+				auto envmap_on_adapter_change2 = pattern("8B 83 ? ? ? ? 25 FF FF FF FE 5F").get_one();
+				auto shadows_on_adapter_change = pattern("89 15 ? ? ? ? 85 44 24").get_one();
+					
+				menu_locals.emplace_back(fsaa_on_adapter_change.get<void>(-6 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_FSAA].m_entryDataInt));
+				menu_locals.emplace_back(fsaa_on_adapter_change.get<void>(0 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_FSAA].m_visibilityAndName));
+				menu_locals.emplace_back(fsaa_on_adapter_change.get<void>(0xD + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_FSAA].m_visibilityAndName));
+				menu_locals.emplace_back(fsaa_on_adapter_change.get<void>(0x24 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_FSAA].m_visibilityAndName));
+				menu_locals.emplace_back(fsaa_on_adapter_change.get<void>(0x1A + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_FSAA].m_value));
+
+				menu_locals.emplace_back(envmap_on_adapter_change1, offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_value));
+
+				menu_locals.emplace_back(envmap_on_adapter_change2.get<void>(0 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_visibilityAndName));
+				menu_locals.emplace_back(envmap_on_adapter_change2.get<void>(0xD + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_visibilityAndName));
+				menu_locals.emplace_back(envmap_on_adapter_change2.get<void>(0x1E + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_visibilityAndName));
+				menu_locals.emplace_back(envmap_on_adapter_change2.get<void>(0x37 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_visibilityAndName));
+
+				menu_locals.emplace_back(envmap_on_adapter_change2.get<void>(-6 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_value));
+				menu_locals.emplace_back(envmap_on_adapter_change2.get<void>(0x31 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_value));
+
+				menu_locals.emplace_back(shadows_on_adapter_change.get<void>(-6 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_value));
+				menu_locals.emplace_back(shadows_on_adapter_change.get<void>(0x12 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_value));
+				menu_locals.emplace_back(shadows_on_adapter_change.get<void>(0x28 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_value));
+
+				menu_locals.emplace_back(shadows_on_adapter_change.get<void>(0xC + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_visibilityAndName));
+				menu_locals.emplace_back(shadows_on_adapter_change.get<void>(0x2E + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_visibilityAndName));
+				menu_locals.emplace_back(shadows_on_adapter_change.get<void>(0x3E + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_visibilityAndName));
+			}
 
 			InjectHook(advanced_graphics_load_settings, PC_GraphicsAdvanced_LoadSettings, PATCH_JUMP);
 			InjectHook(advanced_graphics_save_settings, PC_GraphicsAdvanced_SaveSettings, PATCH_JUMP);
 
 			InjectHook(set_graphics_from_preset, PC_GraphicsAdvanced_SetGraphicsFromPresetQuality, PATCH_JUMP);
 
-			Patch<int32_t>(graphics_advanced_enter.get<void>(0x22 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_value));
+			menu_locals.emplace_back(graphics_advanced_enter.get<void>(0x22 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_value));
 
 			InjectHook(graphics_advanced_enter.get<void>(0x3B), PC_GraphicsAdvanced_Enter_NewOptions, PATCH_JUMP);
 			InjectHook(graphics_advanced_select, PC_GraphicsAdvanced_Select_NewOptions, PATCH_JUMP);
@@ -3524,70 +3672,45 @@ void OnInitializeHook()
 			{
 				Patch(addr, &gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_entries[EntryID::GRAPHICS_ADV_FSAA].m_value);
 			}
-
-			for (void* addr : gamma_locals_value)
-			{
-				Patch<int32_t>(addr, offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_value));
-			}
-
-			Patch<int32_t>(fsaa_on_adapter_change.get<void>(-6 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_FSAA].m_entryDataInt));
-			Patch<int32_t>(fsaa_on_adapter_change.get<void>(0 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_FSAA].m_visibilityAndName));
-			Patch<int32_t>(fsaa_on_adapter_change.get<void>(8 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_FSAA].m_value));
-			Patch<int32_t>(fsaa_on_adapter_change.get<void>(0x17 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_FSAA].m_visibilityAndName));
 			
-			Patch<int32_t>(gamma_on_adapter_change.get<void>(0 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_entryDataInt));
-			Patch<int32_t>(gamma_on_adapter_change.get<void>(0xC + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_visibilityAndName));
+			menu_locals.emplace_back(gamma_on_adapter_change.get<void>(0 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_entryDataInt));
+			menu_locals.emplace_back(gamma_on_adapter_change.get<void>(0xC + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_visibilityAndName));
 			// Gamma m_value change was NOP'd above
-			//Patch<int32_t>(gamma_on_adapter_change.get<void>(0x12 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_value));
-			Patch<int32_t>(gamma_on_adapter_change.get<void>(0x21 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_visibilityAndName));
-
-			Patch<int32_t>(envmap_on_adapter_change1, offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_value));
-			Patch<int32_t>(envmap_on_adapter_change2.get<void>(0 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_visibilityAndName));
-			Patch<int32_t>(envmap_on_adapter_change2.get<void>(0xF + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_value));
-			Patch<int32_t>(envmap_on_adapter_change2.get<void>(0x19 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_visibilityAndName));
-			Patch<int32_t>(envmap_on_adapter_change2.get<void>(0x37 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_value));
-			Patch<int32_t>(envmap_on_adapter_change2.get<void>(0x37 + 6 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_visibilityAndName));
-
-			Patch<int32_t>(shadows_on_adapter_change.get<void>(-6 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_value));
-			Patch<int32_t>(shadows_on_adapter_change.get<void>(0xF + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_visibilityAndName));
-			Patch<int32_t>(shadows_on_adapter_change.get<void>(0xF + 6 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_value));
-			Patch<int32_t>(shadows_on_adapter_change.get<void>(0x2B + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_value));
-			Patch<int32_t>(shadows_on_adapter_change.get<void>(0x31 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_visibilityAndName));
-			Patch<int32_t>(shadows_on_adapter_change.get<void>(0x41 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_visibilityAndName));
+			//menu_locals.emplace_back(gamma_on_adapter_change.get<void>(0x12 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_value));
+			menu_locals.emplace_back(gamma_on_adapter_change.get<void>(0x21 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_visibilityAndName));
 
 			// Build and inject a new jump table
-			Patch<uint8_t>(advanced_graphics_display_jump_table.get<void>(2 + 2), EntryID::GRAPHICS_ADV_NUM - 1);
+			Patch<uint8_t>(advanced_graphics_display_jump_table.get<void>(4 + 2 + 2), EntryID::GRAPHICS_ADV_NUM - 1);
 
-			void** orgJumpTable = *advanced_graphics_display_jump_table.get<void**>(0xB + 3);
+			void** orgJumpTable = *advanced_graphics_display_jump_table.get<void**>(4 + 0xB + 3);
 			static const void* advanced_graphics_display_new_jump_table[EntryID::GRAPHICS_ADV_NUM] = {
 				orgJumpTable[0], orgJumpTable[1], orgJumpTable[2],
 				&PC_GraphicsAdvanced_Display_CaseNewOptions, &PC_GraphicsAdvanced_Display_CaseNewOptions,
 				orgJumpTable[3], orgJumpTable[4], orgJumpTable[5], orgJumpTable[6], &PC_GraphicsAdvanced_Display_CaseNewOptions, orgJumpTable[7], orgJumpTable[8],
 				orgJumpTable[9], orgJumpTable[10]
 			};
-			Patch(advanced_graphics_display_jump_table.get<void**>(0xB + 3), &advanced_graphics_display_new_jump_table);
+			Patch(advanced_graphics_display_jump_table.get<void**>(4 + 0xB + 3), &advanced_graphics_display_new_jump_table);
 
-			Patch<int32_t>(advanced_graphics_texture_quality_display_value, offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_TEXTUREQUALITY].m_value));
+			menu_locals.emplace_back(advanced_graphics_texture_quality_display_value, offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_TEXTUREQUALITY].m_value));
 			Patch<int8_t>(advanced_graphics_texture_quality_display_arrow, EntryID::GRAPHICS_ADV_TEXTUREQUALITY);
 
-			Patch<int32_t>(advanced_graphics_envmap_display.get<void>(2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_visibilityAndName) + 3);
-			Patch<int32_t>(advanced_graphics_envmap_display.get<void>(6 + 7 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_ENVMAP].m_value));
-
-			Patch<int32_t>(advanced_graphics_shadows_display.get<void>(2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_visibilityAndName) + 3);
-			Patch<int32_t>(advanced_graphics_shadows_display.get<void>(6 + 7 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_value));
-
-			Patch<int32_t>(advanced_graphics_draw_distance_display.get<void>(2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_DRAWDISTANCE].m_value));
-			Patch<int32_t>(advanced_graphics_draw_distance_display.get<void>(0x24 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_DRAWDISTANCE].m_value));
+			menu_locals.emplace_back(advanced_graphics_draw_distance_display.get<void>(2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_DRAWDISTANCE].m_value));
+			menu_locals.emplace_back(advanced_graphics_draw_distance_display.get<void>(0x24 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_DRAWDISTANCE].m_value));
 			Patch<int8_t>(advanced_graphics_draw_distance_display_arrow, EntryID::GRAPHICS_ADV_DRAWDISTANCE);
 
-			Patch<int32_t>(advanced_graphics_gamma_display.get<void>(2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_value));
-			Patch<int32_t>(advanced_graphics_gamma_display.get<void>(0x22 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_value));
+			menu_locals.emplace_back(advanced_graphics_gamma_display.get<void>(2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_value));
+			menu_locals.emplace_back(advanced_graphics_gamma_display.get<void>(0x22 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_GAMMA].m_value));
 			Patch<int8_t>(advanced_graphics_gamma_display_arrow, EntryID::GRAPHICS_ADV_GAMMA);
 
-			Patch<int32_t>(advanced_graphics_fsaa_display_value, offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_FSAA].m_value));
+			menu_locals.emplace_back(advanced_graphics_fsaa_display_value, offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_FSAA].m_value));
 			Patch<int8_t>(advanced_graphics_fsaa_display_arrow, EntryID::GRAPHICS_ADV_FSAA);
 
 			InterceptCall(graphics_change_pattern.get<void>(-5), orgGraphics_SetupRenderFromMenuOptions, Graphics_Change_SetupRenderFromMenuOptions);
+
+			for (const auto& addr : menu_locals)
+			{
+				Patch<int32_t>(std::get<void*>(addr), std::get<size_t>(addr));
+			}
 
 			PC_GraphicsAdvanced_Handle_JumpBack = advanced_graphics_handle_hook.get<void>(7);
 			InjectHook(advanced_graphics_handle_hook.get<void>(), PC_GraphicsAdvanced_Handle_NewOptions, PATCH_JUMP);
@@ -3693,31 +3816,49 @@ void OnInitializeHook()
 		// Only make frontend changes if all functionality has been successfully patched in
 		if (HasGlobals && HasCMR3FE && HasCMR3Font && HasMenuHook && HasLanguageHook && HasPatches_FOV && HasPatches_SplitScreenOption && HasPatches_DigitalTacho) try
 		{	
-			void* back_locals[] = {
-				get_pattern("8D 85 ? ? ? ? 50 E8 ? ? ? ? BA", 2),
-			};
+			void* back_locals;
+			void* graphics_display_jump_table_num;
+			void*** graphics_display_jump_table_ptr;
+			void* graphics_display_new_case = &PC_GraphicsOptions_Display_CaseNewOptions;
+			try
+			{
+				// EFIGS/Polish
+				back_locals = get_pattern("8D 85 ? ? ? ? 50 E8 ? ? ? ? BA", 2);
+				PC_GraphicsOptions_Display_NewOptionsJumpBack = get_pattern("0F BF 55 18 3B DA 75 07");
 
-			auto graphics_display_jump_table = pattern("83 FB 05 0F 87").get_one();
+				auto graphics_display_jump_table = pattern("83 FB 05 0F 87").get_one();
+				graphics_display_jump_table_num = graphics_display_jump_table.get<void>(2);
+				graphics_display_jump_table_ptr = graphics_display_jump_table.get<void**>(9 + 3);
+
+			}
+			catch (const hook::txn_exception&)
+			{
+				// Czech
+				back_locals = get_pattern("8D 85 ? ? ? ? 50 E8 ? ? ? ? 8B F8 83 C9 FF", 2);
+				PC_GraphicsOptions_Display_NewOptionsJumpBack = get_pattern("0F BF 45 ? 39 44 24");
+
+				auto graphics_display_jump_table = pattern("89 4C 24 ? 83 F8 05").get_one();
+				graphics_display_jump_table_num = graphics_display_jump_table.get<void>(4 + 2);
+				graphics_display_jump_table_ptr = graphics_display_jump_table.get<void**>(13 + 3);
+
+				graphics_display_new_case = &PC_GraphicsOptions_Display_CaseNewOptions_Czech;
+			}
+
 			auto graphics_enter_new_options = get_pattern("89 86 ? ? ? ? E8 ? ? ? ? 5E", 6 + 5 + 1);
 			auto graphics_exit_new_options = get_pattern("8B 86 ? ? ? ? 50 E8 ? ? ? ? E8", 0x17);
 
-			PC_GraphicsOptions_Display_NewOptionsJumpBack = get_pattern("0F BF 55 18 3B DA 75 07");
-
-			for (void* addr : back_locals)
-			{
-				Patch<uint32_t>(addr, offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_BACK]));
-			}
-
 			// Build and inject a new jump table
-			Patch<uint8_t>(graphics_display_jump_table.get<void>(2), EntryID::GRAPHICS_NUM - 1);
+			Patch<uint8_t>(graphics_display_jump_table_num, EntryID::GRAPHICS_NUM - 1);
 
-			void** orgJumpTable = *graphics_display_jump_table.get<void**>(9 + 3);
+			void** orgJumpTable = *graphics_display_jump_table_ptr;
 			static const void* graphics_display_new_jump_table[EntryID::GRAPHICS_NUM] = {
-				orgJumpTable[0], orgJumpTable[1], orgJumpTable[2], orgJumpTable[3], &PC_GraphicsOptions_Display_CaseNewOptions,
-				&PC_GraphicsOptions_Display_CaseNewOptions, &PC_GraphicsOptions_Display_CaseNewOptions, &PC_GraphicsOptions_Display_CaseNewOptions,
+				orgJumpTable[0], orgJumpTable[1], orgJumpTable[2], orgJumpTable[3],
+				graphics_display_new_case, graphics_display_new_case, graphics_display_new_case, graphics_display_new_case,
 				orgJumpTable[4], orgJumpTable[5]
 			};
-			Patch(graphics_display_jump_table.get<void**>(9 + 3), &graphics_display_new_jump_table);
+			Patch(graphics_display_jump_table_ptr, &graphics_display_new_jump_table);
+
+			Patch<uint32_t>(back_locals, offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_BACK]));
 
 			InjectHook(graphics_enter_new_options, PC_GraphicsOptions_Enter_NewOptions, PATCH_JUMP);
 			InjectHook(graphics_exit_new_options, PC_GraphicsOptions_Exit_NewOptions, PATCH_JUMP);

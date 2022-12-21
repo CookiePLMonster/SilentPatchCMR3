@@ -367,7 +367,7 @@ void RecalculateUI();
 
 namespace Graphics::Patches
 {
-	inline float* UI_resolutionWidthMult;
+	inline float* UI_resolutionWidthMult[2]; // 1 in Polish/EFIGS (both will point to the same global), 2 in Czech
 
 	inline int32_t* UI_CoutdownPosXVertical[2]; // Special cased, as it's half-center
 
