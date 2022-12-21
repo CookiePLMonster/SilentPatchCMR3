@@ -2972,6 +2972,19 @@ void OnInitializeHook()
 					right_blit_texts.emplace_back(match.get<void>());
 				});
 
+			// Super Special Stage time trial
+			auto sss_trial_begin = reinterpret_cast<uintptr_t>(ReadCallFrom(get_pattern("50 E8 ? ? ? ? 8B 0D ? ? ? ? 6A 12", 1)));
+			auto sss_trial_end = sss_trial_begin + 0xB20; // Hardcode an approximate size of the function... yuck.
+			right_blit_texts.emplace_back(pattern(sss_trial_begin, sss_trial_end, "E8 ? ? ? ? 46 83 FE 02 7C 97").get_first<void>());
+			pattern(sss_trial_begin, sss_trial_end, "68 2D 01 00 00").for_each_result([&](pattern_match match)
+				{
+					UI_RightAlignElements.emplace_back(std::in_place_type<Int32Patch>, match.get<int32_t>(1), 301);
+				});
+			pattern(sss_trial_begin, sss_trial_end, "68 7B 01 00 00").for_each_result([&](pattern_match match)
+				{
+					UI_RightAlignElements.emplace_back(std::in_place_type<Int32Patch>, match.get<int32_t>(1), 379);
+				});
+			
 			// Shakedown
 			pattern("E8 ? ? ? ? 46 83 FE 03 7C 9A").count(1).for_each_result([&](pattern_match match)
 				{
