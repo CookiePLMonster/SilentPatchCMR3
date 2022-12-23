@@ -22,6 +22,8 @@ namespace Registry
 
 	inline const wchar_t* ENVMAP_SKY_KEY_NAME = L"ENVMAP_SKY";
 
+	inline const wchar_t* SKIP_WARNING_KEY_NAME = L"SKIP_VERSION_WARNING";
+
 	bool Init();
 
 	void* GetInstallString_Portable(const char* subkey, const char* value);

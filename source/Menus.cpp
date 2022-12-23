@@ -4,12 +4,11 @@
 #include "Graphics.h"
 #include "Language.h"
 #include "Registry.h"
+#include "Version.h"
 
 #include <cstring>
 
 MenuDefinition* gmoFrontEndMenus;
-
-const bool bPolishExecutable = false;
 
 static int32_t GetResolutionEntryFormatID(const MenuResolutionEntry* entry)
 {
@@ -84,8 +83,7 @@ void DrawLeftRightArrows_RightAlign(MenuDefinition* menu, uint32_t entryID, floa
 
 void FrontEndMenuSystem_SetupMenus_Custom(int languagesOnly)
 {
-	// TODO: Check for Polish EXE
-	if (bPolishExecutable)
+	if (Version::IsPolish())
 	{
 		// Re-enable Languages screen
 		gmoFrontEndMenus[17].m_entries[3].m_canBeSelected = 1;

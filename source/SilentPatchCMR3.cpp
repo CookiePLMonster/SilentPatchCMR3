@@ -14,6 +14,7 @@
 #include "Menus.h"
 #include "RenderState.h"
 #include "Registry.h"
+#include "Version.h"
 
 #include <d3d9.h>
 #include <wil/com.h>
@@ -386,7 +387,33 @@ namespace SPText
 		text.append(std::to_string(rsc_BuildID));
 #endif
 		text.append(" (" __DATE__ ")\nDetected executable: ");
-		text.append("UNKNOWN");
+
+		switch (Version::ExecutableVersion)
+		{
+		case Version::VERSION_EFIGS_DRMFREE:
+			text.append("1.1 International DRM-free");
+			break;
+		case Version::VERSION_POLISH_DRMFREE:
+			text.append("1.1 Polish DRM-free");
+			break;
+		case Version::VERSION_CZECH_DRMFREE:
+			text.append("1.1 Czech DRM-free");
+			break;
+		case Version::VERSION_EFIGS_11:
+			text.append("1.1 International");
+			break;
+		case Version::VERSION_POLISH_11:
+			text.append("1.1 Polish");
+			break;
+		default:
+			text.append("Unknown");
+			break;
+		}
+		
+		if (Version::IsKnownVersion() && !Version::IsSupportedVersion())
+		{
+			text.append(" (unsupported)");
+		}
 
 		std::string result;
 		std::transform(text.begin(), text.end(), std::back_inserter(result), ::toupper);
@@ -2021,7 +2048,7 @@ namespace Graphics::Patches
 }
 
 
-void OnInitializeHook()
+static void ApplyPatches(const bool HasRegistry)
 {
 	static_assert(std::string_view(__FUNCSIG__).find("__stdcall") != std::string_view::npos, "This codebase must default to __stdcall, please change your compilation settings.");
 
@@ -2045,8 +2072,6 @@ void OnInitializeHook()
 	// Globally replace timeGetTime with a QPC-based timer
 	Timers::Setup();
 	Timers::RedirectImports();
-
-	const bool HasRegistry = Registry::Init();
 
 	// Locate globals later patches might rely on
 	bool HasGlobals = false;
@@ -3897,4 +3922,14 @@ void OnInitializeHook()
 		HookEach(texts, InterceptCall);
 	}
 	TXN_CATCH();
+}
+
+void OnInitializeHook()
+{
+	const bool HasRegistry = Registry::Init();
+
+	if (Version::DetectVersion(HasRegistry))
+	{
+		ApplyPatches(HasRegistry);
+	}
 }
