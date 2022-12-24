@@ -376,6 +376,27 @@ namespace UnrandomizeUnknownCodepoints
 	}
 }
 
+namespace FileErrorMessages
+{
+	static void (*orgGraphics_Render)();
+	void Graphics_Render_PumpMessages()
+	{
+		orgGraphics_Render();
+
+		MSG msg;
+		while (PeekMessage(&msg, nullptr, 0, 0, PM_REMOVE) != FALSE)
+		{
+			TranslateMessage(&msg);
+			DispatchMessage(&msg);
+
+			if (msg.message == WM_QUIT)
+			{
+				exit(msg.wParam);
+			}
+		}
+	}
+}
+
 namespace SPText
 {
 	static std::string BuildTextInternal()
@@ -3130,6 +3151,9 @@ static void ApplyPatches(const bool HasRegistry)
 			UI_CenteredElements.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("83 FF 03 75 3A 8B 0D ? ? ? ? B8 ? ? ? ? C7 01", 0x12), 140);
 			UI_CenteredElements.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("8B 0D ? ? ? ? C7 01 ? ? ? ? 8B 15 ? ? ? ? C7 42", 6+2), 160);
 
+			// Dirty disc error
+			centered_blit_texts.emplace_back(get_pattern("E8 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? EB BB"));
+
 			auto splitscreen_4th_viewport_rect2d = get_pattern("DD D8 E8 ? ? ? ? 8B 7C 24 30", 2);
 
 			// Movie rendering
@@ -3444,6 +3468,18 @@ static void ApplyPatches(const bool HasRegistry)
 
 		InjectHook(set_current_font.get<void>(0xA), CMR3Font_SetFontForBlitChar_NOP);
 		InjectHook(set_current_font.get<void>(0x34), CMR3Font_SetFontForBlitChar_NOP);
+	}
+	TXN_CATCH();
+
+
+	// Pump messages in the file error callback
+	try
+	{
+		using namespace FileErrorMessages;
+
+		auto graphics_render = get_pattern("E8 ? ? ? ? E8 ? ? ? ? EB BB", 5);
+
+		InterceptCall(graphics_render, orgGraphics_Render, Graphics_Render_PumpMessages);
 	}
 	TXN_CATCH();
 
