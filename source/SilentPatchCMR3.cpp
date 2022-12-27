@@ -3245,7 +3245,7 @@ static void ApplyPatches(const bool HasRegistry)
 				{ // 1 in EFIGS/Polish, 0 in Czech
 					centered_blit_texts.emplace_back(match.get<void>(18));
 				});
-			pattern("68 40 01 00 00 68 ? ? ? ? E8 ? ? ? ? 50 6A 00 E8").count_hint(1).for_each_result([&](pattern_match match)
+			pattern("68 40 01 00 00 68 ? ? ? ? E8 ? ? ? ? 50 55 E8 ? ? ? ? 5E 5D").count_hint(1).for_each_result([&](pattern_match match)
 				{ // 0 in EFIGS/Polish, 1 in Czech
 					centered_blit_texts.emplace_back(match.get<void>(17));
 				});
