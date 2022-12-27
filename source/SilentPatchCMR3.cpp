@@ -48,13 +48,15 @@ HMODULE GetModuleHandleFromAddress(AT address)
 
 namespace Localization
 {
+	static constexpr uint32_t NUM_LOCALES = 7; // After merging
+	void* gpLanguageData[NUM_LOCALES];
+	const char* gpszCountryInitials[NUM_LOCALES] = { "E", "F", "S", "G", "I", "P", "C" };
+
 	uint32_t (*orgGetLanguageIDByCode)(char code);
 	uint32_t GetCurrentLanguageID_Patched()
 	{
 		return orgGetLanguageIDByCode(Registry::GetRegistryChar(Registry::REGISTRY_SECTION_NAME, L"LANGUAGE").value_or('\0'));
 	}
-
-	uint32_t (*orgGetCurrentLanguageID)();
 
 	uint8_t* gCoDriverLanguage;
 	uint32_t GetCoDriverLanguage()
@@ -70,20 +72,131 @@ namespace Localization
 	static void (*orgSetUnknown)(int a1);
 	static void setUnknown_AndCoDriverLanguage(int a1)
 	{
-		SetCoDriverLanguage(orgGetCurrentLanguageID());
+		SetCoDriverLanguage(GameInfo_GetTextLanguage());
 
 		orgSetUnknown(a1);
 	}
 
-	void (*orgSetMeasurementSystem)(bool bImperial);
+	static void (*orgSetMeasurementSystem_Defaults)(bool bImperial);
 	void SetMeasurementSystem_Defaults()
 	{
-		orgSetMeasurementSystem(orgGetCurrentLanguageID() == 0);
+		orgSetMeasurementSystem_Defaults(GameInfo_GetTextLanguage() == 0);
 	}
 
+	template<std::size_t Index>
+	static void (*orgSetMeasurementSystem)(bool bImperial);
+
+	template<std::size_t Index>
 	void SetMeasurementSystem_FromLanguage(bool)
 	{
-		SetMeasurementSystem_Defaults();
+		orgSetMeasurementSystem<Index>(GameInfo_GetTextLanguage() == 0);
+	}
+
+	template<std::size_t Ctr, typename Tuple, std::size_t... I, typename Func>
+	void HookEachImpl_SetMeasurementSystem(Tuple&& tuple, std::index_sequence<I...>, Func&& f)
+	{
+		(f(std::get<I>(tuple), orgSetMeasurementSystem<Ctr << 16 | I>, SetMeasurementSystem_FromLanguage<Ctr << 16 | I>), ...);
+	}
+
+	template<std::size_t Ctr = 0, typename Vars, typename Func>
+	void HookEach_SetMeasurementSystem(Vars&& vars, Func&& f)
+	{
+		auto tuple = std::tuple_cat(std::forward<Vars>(vars));
+		HookEachImpl_SetMeasurementSystem<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
+	}
+
+	namespace BootScreen
+	{
+		static void (*orgFile_SetCurrentDirectory)(const char* path);
+		void File_SetCurrentDirectory_BootScreen(const char* /*path*/)
+		{			
+			const std::array<const char*, 7> dirs = {
+				"\\Data\\Boot\\English",
+				"\\Data\\Boot\\French",
+				"\\Data\\Boot\\Spanish",
+				"\\Data\\Boot\\German",
+				"\\Data\\Boot\\Italian",
+				"\\Data\\Boot\\Polish",
+				"\\Data\\Boot\\Czech"
+			};
+
+			int langID = GameInfo_GetTextLanguage();
+
+			// If Locale Pack is installed, don't do any special casing
+			// Else, always pick Polish for PL, or pick Czech when CZ exe is used and Spanish is selected
+			if (!Version::HasMultipleLocales())
+			{
+				if (Version::IsPolish())
+				{
+					langID = 5;
+				}
+				else if (Version::IsCzech() && langID == 2)
+				{
+					langID = 6;
+				}
+			}
+
+			if (langID > 0 && langID < 7)
+			{
+				orgFile_SetCurrentDirectory(dirs[langID]);
+			}
+			else
+			{
+				orgFile_SetCurrentDirectory(dirs.front());
+			}
+		}
+	}
+
+	int __cdecl sprintf_cod(char* Buffer, const char* Format, const char* /*cod*/)
+	{
+		const char* fileName;
+		switch (GameInfo_GetCoDriverLanguage())
+		{
+		case 1:
+			fileName = "co_fre";
+			break;
+		case 2:
+			fileName = "co_spa";
+			break;
+		case 3:
+			fileName = "co_ger";
+			break;
+		case 4:
+			fileName = "co_ita";
+			break;
+		case 5:
+			fileName = "co_pola";
+			break;
+		case 6:
+			fileName = "co_polb";
+			break;
+		default:
+			fileName = "co_cze";
+			break;
+		}
+
+		return sprintf_s(Buffer, 260, Format, fileName);
+	}
+
+	char GetLanguageCode(uint32_t langID)
+	{
+		if (langID < NUM_LOCALES)
+		{
+			return gpszCountryInitials[langID][0];
+		}
+		return 'E';
+	}
+
+	uint32_t GetLanguageIDByCode(char code)
+	{
+		auto it = std::find_if(std::begin(gpszCountryInitials), std::end(gpszCountryInitials), [code](const char* text) {
+			return code == text[0];
+		});
+		if (it == std::end(gpszCountryInitials))
+		{
+			return 0;
+		}
+		return std::distance(std::begin(gpszCountryInitials), it);
 	}
 }
 
@@ -96,11 +209,8 @@ namespace Cubes
 	void** gGearCubeLayouts;
 	void** gStageCubeLayouts;
 
-	static void (*orgLoadCubeTextures)();
-	void LoadCubeTextures_AndSetUpLayouts()
+	void SetUpCubeLayouts()
 	{
-		orgLoadCubeTextures();
-
 		void* BLANK = *gBlankCubeTexture;
 
 		// Gear cubes
@@ -134,6 +244,29 @@ namespace Cubes
 			stage1[1] = stage2[1] = stage3[1] = stage4[1] = stage5[1] = stage6[1] = S;
 			specialStage[0] = specialStage[1] = specialStage[2] = S;
 		}
+	}
+
+	template<std::size_t Index>
+	static void (*orgLoadCubeTextures)();
+
+	template<std::size_t Index>
+	static void LoadCubeTextures_AndSetUpLayouts()
+	{
+		orgLoadCubeTextures<Index>();
+		SetUpCubeLayouts();
+	}
+
+	template<std::size_t Ctr, typename Tuple, std::size_t... I, typename Func>
+	void HookEachImpl(Tuple&& tuple, std::index_sequence<I...>, Func&& f)
+	{
+		(f(std::get<I>(tuple), orgLoadCubeTextures<Ctr << 16 | I>, LoadCubeTextures_AndSetUpLayouts<Ctr << 16 | I>), ...);
+	}
+
+	template<std::size_t Ctr = 0, typename Vars, typename Func>
+	void HookEach(Vars&& vars, Func&& f)
+	{
+		auto tuple = std::tuple_cat(std::forward<Vars>(vars));
+		HookEachImpl<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
 	}
 }
 
@@ -2068,6 +2201,219 @@ namespace Graphics::Patches
 	}
 }
 
+static void ApplyMergedLocalizations()
+{
+	const bool WantsTexts = Version::HasMultipleLocales();
+	const bool WantsCoDrivers = Version::HasMultipleCoDrivers();
+	const bool WantsNickyGristPatched = Version::IsPolish() && Version::HasNickyGristFiles();
+
+	using namespace Memory;
+	using namespace hook::txn;
+
+	auto InterceptCall = [](void* addr, auto&& func, auto&& hook)
+	{
+		ReadCall(addr, func);
+		InjectHook(addr, hook);
+	};
+
+	bool HasGameInfo = false;
+	try
+	{
+		// Different pattern for EFIGS/Czech and Polish
+		try
+		{
+			GameInfo_GetTextLanguage = static_cast<decltype(GameInfo_GetTextLanguage)>(get_pattern("E8 ? ? ? ? 88 44 24 00", -0xB));
+		}
+		catch (const hook::txn_exception&)
+		{
+			GameInfo_GetTextLanguage = static_cast<decltype(GameInfo_GetTextLanguage)>(get_pattern("6A 45 E8 ? ? ? ? C3"));
+		}
+		GameInfo_GetCoDriverLanguage = static_cast<decltype(GameInfo_GetCoDriverLanguage)>(ReadCallFrom(get_pattern("E8 ? ? ? ? 85 C0 75 45 8D 44 24 08")));
+
+		HasGameInfo = true;
+	}
+	TXN_CATCH();
+
+	// Restored languages in Polish
+	// TODO: Tidy up
+	if (HasGameInfo) try
+	{
+		using namespace Localization;
+
+		auto get_current_language_id = pattern("6A 45 E8 ? ? ? ? C3").get_one();
+
+		// Un-hardcoded English text language
+		ReadCall(get_current_language_id.get<void>(2), orgGetLanguageIDByCode);
+		InjectHook(get_current_language_id.get<void>(), GetCurrentLanguageID_Patched, PATCH_JUMP);
+
+		// Un-hardcoded co-driver language
+		// Patch will probably fail pattern matches on set_defaults when used on the English executable
+		if (WantsCoDrivers || WantsNickyGristPatched) try
+		{
+			auto get_codriver_language = ReadCallFrom(get_pattern("E8 ? ? ? ? 83 F8 03 77 40"));
+			auto set_codriver_language = ReadCallFrom(get_pattern("E8 ? ? ? ? 8B 4F 24"));
+			auto set_defaults = pattern("A2 ? ? ? ? C6 05 ? ? ? ? 01 88 1D").get_one();
+			auto unk_on_main_menu_start = get_pattern("75 ? 6A 02 E8 ? ? ? ? 81 C4", 4);
+
+			gCoDriverLanguage = *set_defaults.get<uint8_t*>(5 + 2);
+			InjectHook(get_codriver_language, GetCoDriverLanguage, PATCH_JUMP);
+			InjectHook(set_codriver_language, SetCoDriverLanguage, PATCH_JUMP);
+
+			//  mov bCoDriverLanguage, 1 -> mov bCoDriverLanguage, al
+			Patch(set_defaults.get<void>(5), { 0x90, 0xA2 });
+			Patch(set_defaults.get<void>(5 + 2), gCoDriverLanguage);
+			Nop(set_defaults.get<void>(5 + 6), 1);
+
+			// Unknown, called once as main menu starts
+			InterceptCall(unk_on_main_menu_start, orgSetUnknown, setUnknown_AndCoDriverLanguage);
+		}
+		TXN_CATCH();
+	}
+	TXN_CATCH();
+
+
+	// Multi7 texts
+	if (WantsTexts) try
+	{
+		using namespace Localization;
+
+		// Patch localizations first, and then the other locale-specific stuff only if that succeeds
+		void* num_languages_int32[] = {
+			get_pattern("8D 4C 24 08 BF 05 00 00 00", 4 + 1),
+			get_pattern("BF 05 00 00 00 56 E8 ? ? ? ? 46", 1),
+		};
+
+		auto language_data1 = pattern("8B 0C 85 ? ? ? ? 8D 34 85").get_one();
+		void* language_data[] = {
+			get_pattern("8B 04 B5 ? ? ? ? 85 C0 74 ? 56", 3),
+			[] {
+				try {
+					// EFIGS/Polish
+					return get_pattern("8B 04 B5 ? ? ? ? 5E 89 44 24 04", 3);
+				} catch (const hook::txn_exception&) {
+					// Czech
+					return get_pattern("8B 0C B5 ? ? ? ? 51 E8 ? ? ? ? 5E", 3);
+				}
+			}(),
+			language_data1.get<void>(3),
+			language_data1.get<void>(7 + 3),
+			get_pattern("8B 04 B5 ? ? ? ? 85 C0 74 11", 3),
+			get_pattern("C7 04 B5 ? ? ? ? 00 00 00 00 5E C2 04 00", 3),
+		};
+
+		void* country_initials[] = {
+			get_pattern("8B 04 85 ? ? ? ? 6A 00", 3),
+		};
+		void* get_language_id_by_code;
+		try
+		{
+			// EFIGS/Polish
+			get_language_id_by_code = get_pattern("8A 54 24 04 33 C0");
+		}
+		catch (const hook::txn_exception&)
+		{
+			// Czech
+			get_language_id_by_code = get_pattern("8A 44 24 04 56");
+		}
+
+		auto get_language_code = get_pattern("8B 44 24 04 8B 0C 85 ? ? ? ? 8A 01");
+
+		for (void* addr : num_languages_int32)
+		{
+			Patch<int32_t>(addr, NUM_LOCALES);
+		}
+
+		for (void* addr : language_data)
+		{
+			Patch(addr, &gpLanguageData);
+		}
+		for (void* addr : country_initials)
+		{
+			Patch(addr, &gpszCountryInitials);
+		}
+
+		InjectHook(get_language_code, GetLanguageCode, PATCH_JUMP);
+		InjectHook(get_language_id_by_code, GetLanguageIDByCode, PATCH_JUMP);
+
+		Menus::Patches::MultipleTextsPatched = true;
+
+		// Revert measurement systems defaulting to imperial for English, metric otherwise (Polish forced metric)
+		try
+		{
+			auto set_measurement_system = get_pattern("E8 ? ? ? ? 8B 46 4C 33 C9");
+
+			std::array<void*, 3> set_system_places_to_patch = {
+				get_pattern("E8 ? ? ? ? E8 ? ? ? ? 50 E8 ? ? ? ? 68"),
+				get_pattern("6A 00 E8 ? ? ? ? 6A 01 E8 ? ? ? ? 5F", 2),
+				get_pattern("56 E8 ? ? ? ? 56 E8 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? 57", 1),
+			};
+
+			auto set_defaults = pattern("E8 ? ? ? ? B0 64").get_one();
+
+			HookEach_SetMeasurementSystem(set_system_places_to_patch, InterceptCall);
+
+			ReadCall(set_measurement_system, orgSetMeasurementSystem_Defaults);
+			InjectHook(set_defaults.get<void>(), SetMeasurementSystem_Defaults);
+			Nop(set_defaults.get<void>(5 + 2), 6);
+		}
+		TXN_CATCH();
+	}
+	TXN_CATCH();
+
+
+	// Restored cube layouts
+	try
+	{
+		using namespace Cubes;
+
+		std::array<void*, 2> load_cube_textures = {
+			get_pattern("E8 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? 8B 44 24 08 6A 0E"),
+			get_pattern("E8 ? ? ? ? A1 ? ? ? ? 85 C0 75 14"),
+		};
+
+		gBlankCubeTexture = *get_pattern<void**>("56 68 ? ? ? ? E8 ? ? ? ? 68 ? ? ? ? E8 ? ? ? ? 68", 1 + 5 + 5 + 1);
+		gGearCubeTextures = *get_pattern<void**>("BE ? ? ? ? BF 07 00 00 00 56", 1);
+		gStageCubeTextures = *get_pattern<void**>("BE ? ? ? ? BF 09 00 00 00 56", 1);
+
+		gGearCubeLayouts = *get_pattern<void**>("8B 04 95 ? ? ? ? 50 6A 00 E8 ? ? ? ? 83 E0 03 83 C0 02 50 6A 00", 3);
+		gStageCubeLayouts = *get_pattern<void**>("8B 15 ? ? ? ? A3 ? ? ? ? 89 15", 6 + 1);
+
+		HookEach(load_cube_textures, InterceptCall);
+	}
+	TXN_CATCH();
+
+
+	// Multi7 boot screen (if present)
+	if (HasGameInfo && Version::HasMultipleBootScreens()) try
+	{
+		using namespace Localization::BootScreen;
+
+		auto set_current_directory_boot_screen = get_pattern("E8 ? ? ? ? 53 68 ? ? ? ? 68 ? ? ? ? 68");
+		InterceptCall(set_current_directory_boot_screen, orgFile_SetCurrentDirectory, File_SetCurrentDirectory_BootScreen);
+	}
+	TXN_CATCH();
+
+
+	// Multi7 co-drivers
+	if (HasGameInfo && WantsCoDrivers) try
+	{
+		void* sprintf_cod;
+		try
+		{
+			// EFIGS/Polish
+			sprintf_cod = get_pattern("E8 ? ? ? ? 83 C4 0C 68 ? ? ? ? E8 ? ? ? ? 8D 54 24 04");
+		}
+		catch (const hook::txn_exception&)
+		{
+			sprintf_cod = get_pattern("52 E8 ? ? ? ? 83 C4 0C 68", 1);
+		}
+		InjectHook(sprintf_cod, Localization::sprintf_cod);
+
+		Menus::Patches::MultipleCoDriversPatched = true;
+	}
+	TXN_CATCH();
+}
+
 
 static void ApplyPatches(const bool HasRegistry)
 {
@@ -2358,94 +2704,6 @@ static void ApplyPatches(const bool HasRegistry)
 		InjectHook(get_localized_string, Language_GetString, PATCH_JUMP);
 
 		HasLanguageHook = true;
-	}
-	TXN_CATCH();
-
-
-	try
-	{
-		using namespace Localization;
-
-		auto get_current_language_id = pattern("6A 45 E8 ? ? ? ? C3").get_one();
-		orgGetCurrentLanguageID = static_cast<decltype(orgGetCurrentLanguageID)>(get_current_language_id.get<void>());
-
-		// Un-hardcoded English text language
-		ReadCall(get_current_language_id.get<void>(2), orgGetLanguageIDByCode);
-		InjectHook(get_current_language_id.get<void>(), GetCurrentLanguageID_Patched, PATCH_JUMP);
-
-		// Un-hardcoded co-driver language
-		// Patch will probably fail pattern matches on set_defaults when used on the English executable
-		try
-		{
-			auto get_codriver_language = ReadCallFrom(get_pattern("E8 ? ? ? ? 83 F8 03 77 40"));
-			auto set_codriver_language = ReadCallFrom(get_pattern("E8 ? ? ? ? 8B 4F 24"));
-			auto set_defaults = pattern("A2 ? ? ? ? C6 05 ? ? ? ? 01 88 1D").get_one();
-			auto unk_on_main_menu_start = get_pattern("75 ? 6A 02 E8 ? ? ? ? 81 C4", 4);
-
-			gCoDriverLanguage = *set_defaults.get<uint8_t*>(5 + 2);
-			InjectHook(get_codriver_language, GetCoDriverLanguage, PATCH_JUMP);
-			InjectHook(set_codriver_language, SetCoDriverLanguage, PATCH_JUMP);
-
-			//  mov bCoDriverLanguage, 1 -> mov bCoDriverLanguage, al
-			Patch(set_defaults.get<void>(5), { 0x90, 0xA2 });
-			Patch(set_defaults.get<void>(5 + 2), gCoDriverLanguage);
-			Nop(set_defaults.get<void>(5 + 6), 1);
-
-			// Unknown, called once as main menu starts
-			ReadCall(unk_on_main_menu_start, orgSetUnknown);
-			InjectHook(unk_on_main_menu_start, setUnknown_AndCoDriverLanguage);
-		}
-		TXN_CATCH();
-
-		// Revert measurement systems defaulting to imperial for English, metric otherwise (Polish forced metric)
-		try
-		{
-			auto set_measurement_system = get_pattern("E8 ? ? ? ? 8B 46 4C 33 C9");
-
-			void* set_system_places_to_patch[] = {
-				get_pattern("E8 ? ? ? ? E8 ? ? ? ? 50 E8 ? ? ? ? 68"),
-				get_pattern("6A 00 E8 ? ? ? ? 6A 01 E8 ? ? ? ? 5F", 2),
-				get_pattern("56 E8 ? ? ? ? 56 E8 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? 57", 1),
-			};
-
-			auto set_defaults = pattern("E8 ? ? ? ? B0 64").get_one();
-			
-			ReadCall(set_measurement_system, orgSetMeasurementSystem);
-			for (void* addr : set_system_places_to_patch)
-			{
-				InjectHook(addr, SetMeasurementSystem_FromLanguage);
-			}
-
-			InjectHook(set_defaults.get<void>(), SetMeasurementSystem_Defaults);
-			Nop(set_defaults.get<void>(5 + 2), 6);
-		}
-		TXN_CATCH();
-	}
-	TXN_CATCH();
-
-
-	// Restored cube layouts
-	try
-	{
-		using namespace Cubes;
-
-		void* load_cube_textures[] = {
-			get_pattern("E8 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? 8B 44 24 08 6A 0E"),
-			get_pattern("E8 ? ? ? ? A1 ? ? ? ? 85 C0 75 14"),
-		};
-
-		gBlankCubeTexture = *get_pattern<void**>("56 68 ? ? ? ? E8 ? ? ? ? 68 ? ? ? ? E8 ? ? ? ? 68", 1 + 5 + 5 + 1);
-		gGearCubeTextures = *get_pattern<void**>("BE ? ? ? ? BF 07 00 00 00 56", 1);
-		gStageCubeTextures = *get_pattern<void**>("BE ? ? ? ? BF 09 00 00 00 56", 1);
-
-		gGearCubeLayouts = *get_pattern<void**>("8B 04 95 ? ? ? ? 50 6A 00 E8 ? ? ? ? 83 E0 03 83 C0 02 50 6A 00", 3);
-		gStageCubeLayouts = *get_pattern<void**>("8B 15 ? ? ? ? A3 ? ? ? ? 89 15", 6 + 1);
-
-		ReadCall(load_cube_textures[0], orgLoadCubeTextures);
-		for (void* addr : load_cube_textures)
-		{
-			InjectHook(addr, LoadCubeTextures_AndSetUpLayouts);
-		}
 	}
 	TXN_CATCH();
 
@@ -3958,6 +4216,10 @@ static void ApplyPatches(const bool HasRegistry)
 		HookEach(texts, InterceptCall);
 	}
 	TXN_CATCH();
+
+	
+	// Install the locale pack (if applicable)
+	ApplyMergedLocalizations();
 }
 
 void OnInitializeHook()

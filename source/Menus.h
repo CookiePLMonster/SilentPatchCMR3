@@ -165,4 +165,6 @@ namespace Menus::Patches
 {
 	inline bool ExtraGraphicsOptionsPatched = false;
 	inline bool ExtraAdvancedGraphicsOptionsPatched = false;
+	inline bool MultipleTextsPatched = false;
+	inline bool MultipleCoDriversPatched = false;
 }

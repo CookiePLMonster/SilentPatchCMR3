@@ -1,5 +1,7 @@
 #include "Registry.h"
 
+#include "Globals.h"
+
 #include <filesystem>
 #include <string>
 
@@ -99,18 +101,12 @@ void Registry::Patches::SetRegistryChar_Patch(const char* /*subkey*/, const char
 
 void* Registry::GetInstallString_Portable(const char* /*subkey*/, const char* /*key*/)
 {
-	wil::unique_cotaskmem_string pathToExe;
-	if (SUCCEEDED(wil::GetModuleFileNameW(nullptr, pathToExe)))
+	const auto pathToGameDir = GetPathToGameDir().string();
+	void* mem = Patches::orgOperatorNew(pathToGameDir.length() + 1);
+	if (mem != nullptr)
 	{
-		const auto pathToGameDir = std::filesystem::path(pathToExe.get()).parent_path().string();
-		void* mem = Patches::orgOperatorNew(pathToGameDir.length() + 1);
-		if (mem != nullptr)
-		{
-			char* buf = static_cast<char*>(mem);
-			memcpy(buf, pathToGameDir.c_str(), pathToGameDir.length() + 1);
-		}
-		return mem;
+		char* buf = static_cast<char*>(mem);
+		memcpy(buf, pathToGameDir.c_str(), pathToGameDir.length() + 1);
 	}
-
-	return nullptr;
+	return mem;
 }

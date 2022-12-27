@@ -1,6 +1,10 @@
 #include "Language.h"
 
+#include "Version.h"
+
 #include <map>
+
+using namespace Language;
 
 struct LangFile
 {
@@ -10,19 +14,21 @@ struct LangFile
 	const char* m_texts[1]; // VLA
 };
 
-const char* Language_GetString(uint32_t ID)
+static std::map<uint32_t, const char*> GetOverrideStrings()
 {
-	// Original code with bounds check added
-	const LangFile* language = *gpCurrentLanguage;
-	if (ID < language->m_numFiles)
+	std::map<uint32_t, const char*> result;
+
+	if (Version::HasJanuszWituchVoiceLines())
 	{
-		return language->m_texts[ID];
+		result.emplace(447, "JANUSZ WITUCH");
 	}
 
-	using namespace Language;
+	return result;
+}
 
-	// All strings that were hardcoded in the English release, but translated in the Polish release
-	static const std::map<uint32_t, const char*> newLocalizedStrings = {
+static std::map<uint32_t, const char*> GetNewStrings()
+{
+	std::map<uint32_t, const char*> result = {
 		{ 994, "NA" },
 		{ 1004, "RETURN" }, { 1005, "ESC" }, { 1006, "BACKSPC" }, { 1007, "TAB" },
 		{ 1008, "F1" }, { 1009, "F2" }, { 1010, "F3" }, { 1011, "F4" },
@@ -44,7 +50,30 @@ const char* Language_GetString(uint32_t ID)
 		{ EXTERIOR_FOV, "FOV (CHASE)" },
 		{ INTERIOR_FOV, "FOV (INTERIOR)" },
 	};
-	auto it = newLocalizedStrings.find(ID);
+
+	return result;
+}
+
+const char* Language_GetString(uint32_t ID)
+{
+	static const std::map<uint32_t, const char*> overrideStrings = GetOverrideStrings();
+	auto it = overrideStrings.find(ID);
+	if (it != overrideStrings.end())
+	{
+		return it->second;
+	}
+
+	// Original code with bounds check added
+	const LangFile* language = *gpCurrentLanguage;
+	if (ID < language->m_numFiles)
+	{
+		return language->m_texts[ID];
+	}
+
+	// All strings that were hardcoded in the English release, but translated in the Polish release
+	// + new strings for options
+	static const std::map<uint32_t, const char*> newLocalizedStrings = GetNewStrings();
+	it = newLocalizedStrings.find(ID);
 	if (it != newLocalizedStrings.end())
 	{
 		return it->second;

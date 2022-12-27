@@ -21,4 +21,15 @@ namespace Version
 	bool IsEFIGS();
 	bool IsPolish();
 	bool IsCzech();
+
+	bool HasNickyGristFiles();
+
+	// Polish re-release co-driver
+	bool HasJanuszWituchVoiceLines();
+
+	// Locale pack stuff
+	// Multi7 boot screen (from the locale pack or HD UI)
+	bool HasMultipleBootScreens();
+	bool HasMultipleLocales();
+	bool HasMultipleCoDrivers();
 }

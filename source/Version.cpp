@@ -1,5 +1,6 @@
 #include "Version.h"
 
+#include "Globals.h"
 #include "Registry.h"
 
 #define WIN32_LEAN_AND_MEAN
@@ -18,6 +19,127 @@
 
 #define EXE_DELTAS_DL_LINK "https://cookieplmonster.github.io/cmr3-patching-executables/"
 
+static bool NickyGristFilesPresent = false;
+static bool JanuszWituchVoiceUsed = false;
+bool HasMulti7BootScreens = false, HasMulti7Locales = false, HasMulti7CoDrivers = false;
+static void DetectGameFilesStuff()
+{
+	const std::filesystem::path pathToGame = GetPathToGameDir();
+	std::error_code ec;
+
+	// Nicky Grist files - let's check a few top files from the directory only
+	{
+		const wchar_t* filesToCheck[] = {
+			L"Data/Sounds/Nicky/Aus2nd.coc",
+			L"Data/Sounds/Nicky/Aus11.big",
+			L"Data/Sounds/Nicky/AUS11.coc"
+		};
+
+		bool gristFilesPresent = true;
+		for (const wchar_t* file : filesToCheck)
+		{
+			if (!std::filesystem::exists(pathToGame / file, ec) || ec)
+			{
+				gristFilesPresent = false;
+				break;
+			}
+		}
+		NickyGristFilesPresent = gristFilesPresent;
+	}
+
+	// Check for a re-release Polish co-driver
+	if (Version::IsPolish())
+	{
+		std::uintmax_t fileSize = std::filesystem::file_size(pathToGame / L"Data/Sounds/cod/co_fre.big", ec);
+		if (ec) // Error
+		{
+			fileSize = 0;
+		}
+
+		JanuszWituchVoiceUsed = fileSize == 1665024u;
+	}
+
+	// Multi7 boot screens - check always as we might have it as part of the locale pack or HD UI
+	{
+		const wchar_t* pathsToCheck[] = {
+			L"Data/Boot/Polish",
+			L"Data/Boot/Czech",
+			L"Data/Boot/English",
+			L"Data/Boot/French",
+			L"Data/Boot/Spanish",
+			L"Data/Boot/German",
+			L"Data/Boot/Italian",	
+		};
+		const wchar_t* filesToCheck[] = {
+			L"Copy001.dds", L"Copy002.dds", L"Copy003.dds"
+		};
+		
+		bool bootFilesPresent = true;
+		for (const wchar_t* path : pathsToCheck)
+		{
+			const std::filesystem::path currentPath = pathToGame / path;
+			for (const wchar_t* file : filesToCheck)
+			{
+				if (!std::filesystem::exists(currentPath / file, ec) || ec)
+				{
+					bootFilesPresent = false;
+					break;
+				}
+			}
+		}
+		HasMulti7BootScreens = bootFilesPresent;
+	}
+
+	// Multi7 texts
+	{
+		const wchar_t* filesToCheck[] = {
+			L"Data/strings/Whole_C.Lng",
+			L"Data/strings/Whole_E.Lng",
+			L"Data/strings/Whole_F.Lng",
+			L"Data/strings/Whole_G.Lng",
+			L"Data/strings/Whole_I.Lng",
+			L"Data/strings/Whole_P.Lng",
+			L"Data/strings/Whole_S.Lng",
+		};
+
+		bool textsPresent = true;
+		for (const wchar_t* file : filesToCheck)
+		{
+			if (!std::filesystem::exists(pathToGame / file, ec) || ec)
+			{
+				textsPresent = false;
+				break;
+			}
+		}
+		HasMulti7Locales = textsPresent;
+	}
+
+	// Multi7 co-drivers
+	{
+		const wchar_t* filesToCheck[] = {
+			L"Data/Sounds/cod/co_cze.big",
+			L"Data/Sounds/cod/co_fre.big",
+			L"Data/Sounds/cod/co_ger.big",
+			L"Data/Sounds/cod/co_ita.big",
+			L"Data/Sounds/cod/co_pola.big",
+			L"Data/Sounds/cod/co_polb.big",
+			L"Data/Sounds/cod/co_spa.big",
+		};
+
+		bool coDriversPresent = true;
+		for (const wchar_t* file : filesToCheck)
+		{
+			if (!std::filesystem::exists(pathToGame / file, ec) || ec)
+			{
+				coDriversPresent = false;
+				break;
+			}
+		}
+		HasMulti7CoDrivers = coDriversPresent;
+	}
+}
+
+
 namespace Version
 {
 
@@ -29,6 +151,8 @@ bool DetectVersion(const bool HasRegistry)
 	PIMAGE_NT_HEADERS ntHeader = reinterpret_cast<PIMAGE_NT_HEADERS>(reinterpret_cast<char*>(dosHeader) + dosHeader->e_lfanew);
 
 	ExecutableVersion = (static_cast<uint64_t>(ntHeader->FileHeader.TimeDateStamp) << 32) | ntHeader->OptionalHeader.SizeOfImage;
+
+	DetectGameFilesStuff();
 
 	// If an unknown executable version is used, display a warning; else, just quit
 	if (IsSupportedVersion())
@@ -144,6 +268,31 @@ bool IsPolish()
 bool IsCzech()
 {
 	return ExecutableVersion == VERSION_CZECH_DRMFREE;
+}
+
+bool HasNickyGristFiles()
+{
+	return NickyGristFilesPresent;
+}
+
+bool HasJanuszWituchVoiceLines()
+{
+	return JanuszWituchVoiceUsed;
+}
+
+bool HasMultipleBootScreens()
+{
+	return HasMulti7BootScreens;
+}
+
+bool HasMultipleLocales()
+{
+	return HasMulti7Locales;
+}
+
+bool HasMultipleCoDrivers()
+{
+	return HasMulti7CoDrivers;
 }
 
 bool IsKnownVersion()
