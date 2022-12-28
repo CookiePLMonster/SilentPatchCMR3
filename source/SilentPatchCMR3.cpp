@@ -1712,43 +1712,46 @@ namespace ScaledTexturesSupport
 		HookEachImpl_Misc_Scaled<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
 	}
 
+	static uint32_t nextFontScale = 1;
+	static bool nextFontNearest = false;
+
+	static char* (*PlatformiseTextureFilename)(char* path);
+	static char* PlatformiseTextureFilename_GetScale(char* path)
+	{
+		char* result = PlatformiseTextureFilename(path);
+
+		// With merged locales, this path point at a subdirectory, so be mindful
+		const std::filesystem::path stdPath(result);
+		const std::filesystem::path iniPath = GetPathToGameDir() / stdPath.parent_path() / L"fonts.ini";
+		const std::wstring fontName = stdPath.stem();
+
+		nextFontScale = GetPrivateProfileIntW(fontName.c_str(), L"Scale", 1, iniPath.c_str());
+		UINT useNearestFilter = GetPrivateProfileIntW(fontName.c_str(), L"NearestFilter", -1, iniPath.c_str());
+		if (useNearestFilter == -1)
+		{
+			// Use hardcoded defaults if there is no INI entry for this font
+			static const std::wstring_view fontsWithNearest[] = { L"kro_20", L"gears", L"time", L"speed" };
+			nextFontNearest = std::find(std::begin(fontsWithNearest), std::end(fontsWithNearest), fontName) != std::end(fontsWithNearest);
+		}
+		else
+		{
+			nextFontNearest = useNearestFilter != 0;
+		}
+
+		return result;
+	}
+
 	static D3DTexture* (*orgCreateTexture_Font)(void* a1, const char* name, int a3, int a4, int a5);
 	D3DTexture* CreateTexture_Font_Scaled(void* a1, const char* name, int a3, int a4, int a5)
 	{
 		D3DTexture* result = orgCreateTexture_Font(a1, name, a3, a4, a5);
 		if (result != nullptr)
 		{
-			bool useNearest = false;
-			if (name != nullptr)
-			{
-				static const std::map<std::string_view, std::pair<uint32_t, bool>, std::less<>> textureDimensions = {
-					{ "kro_11", { 128, false } },
-					{ "kro_20", { 256, true } },
-					{ "O_10pt", { 64, false } },
-					{ "O_12pt", { 64, false } },
-					{ "O_30pt", { 128, false } },
-					{ "Out_30pt", { 128, false } },
-					{ "Dig_18pt", { 128, false } },
-					{ "3d_lcd", { 128, false } },
-					{ "gears", { 128, true } },
-					{ "time", { 64, true } },
-					{ "mph", { 128, false } },
-					{ "speed", { 64, true } },
-					{ "hel_18pt", { 256, false } },
-				};
-				auto it = textureDimensions.find(name);
-				if (it != textureDimensions.end())
-				{
-					// Fonts need to take ratios into consideration, unlike normal textures where we force a fixed size
-					const float heightRatio = result->m_height / static_cast<float>(it->second.first);
+			const uint32_t scale = std::exchange(nextFontScale, 1);
+			result->m_width /= scale;
+			result->m_height /= scale;
 
-					result->m_width = static_cast<uint32_t>(result->m_width / heightRatio);
-					result->m_height = it->second.first;
-					useNearest = it->second.second;
-				}
-			}
-
-			if (useNearest)
+			if (std::exchange(nextFontNearest, false))
 			{
 				Core_Texture_SetFilteringMethod(result, D3DTEXF_POINT, D3DTEXF_POINT, D3DTEXF_POINT);
 			}
@@ -2893,10 +2896,12 @@ static void ApplyPatches(const bool HasRegistry)
 			}()
 		};
 		auto load_font = pattern("57 E8 ? ? ? ? 8B 0D ? ? ? ? 6A 01").get_one();
+		auto platformise_texture_filename = get_pattern("E8 ? ? ? ? 8D 54 24 0C 6A 00");
 
 		HookEach_Misc_Scaled(load_texture, InterceptCall);
 
 		InterceptCall(load_font.get<void>(1), orgCreateTexture_Font, CreateTexture_Font_Scaled);
+		InterceptCall(platformise_texture_filename, PlatformiseTextureFilename, PlatformiseTextureFilename_GetScale);
 
 		// NOP Core::Texture_SetFilteringMethod for fonts as we handle it in the above function now
 		InjectHook(load_font.get<void>(0x1F), Texture_SetFilteringMethod_NOP);
