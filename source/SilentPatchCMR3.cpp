@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <filesystem>
 #include <map>
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -52,10 +53,15 @@ namespace Localization
 	void* gpLanguageData[NUM_LOCALES];
 	const char* gpszCountryInitials[NUM_LOCALES] = { "E", "F", "S", "G", "I", "P", "C" };
 
+	char GetLangFromRegistry()
+	{
+		return Registry::GetRegistryChar(Registry::REGISTRY_SECTION_NAME, L"LANGUAGE").value_or('E');
+	}
+
 	uint32_t (*orgGetLanguageIDByCode)(char code);
 	uint32_t GetCurrentLanguageID_Patched()
 	{
-		return orgGetLanguageIDByCode(Registry::GetRegistryChar(Registry::REGISTRY_SECTION_NAME, L"LANGUAGE").value_or('\0'));
+		return orgGetLanguageIDByCode(GetLangFromRegistry());
 	}
 
 	uint8_t* gCoDriverLanguage;
@@ -197,6 +203,106 @@ namespace Localization
 			return 0;
 		}
 		return std::distance(std::begin(gpszCountryInitials), it);
+	}
+
+	int __cdecl sprintf_RegionalFont(char* Buffer, const char* Format, const char* fontName)
+	{
+		// Select what suffix to try
+		char suffix;
+		
+		// No locale pack - hardcode specific subdirs
+		if (!Version::HasMultipleLocales())
+		{
+			if (Version::IsPolish())
+			{
+				suffix = 'P';
+			}
+			else if (Version::IsCzech())
+			{
+				suffix = 'C';
+			}
+			else
+			{
+				suffix = GetLangFromRegistry();
+			}
+		}
+		// With locale pack installed, use the current language
+		else
+		{
+			suffix = GetLangFromRegistry();
+		}
+
+		// Try the suffixed path first
+		int count = sprintf_s(Buffer, 256, "fonts\\fonts_%c\\%s.dds", suffix, fontName);
+
+		std::error_code ec;
+		if (!std::filesystem::exists(Buffer, ec) || ec)
+		{
+			count = sprintf_s(Buffer, 256, Format, fontName);
+		}
+
+		return count;
+	}
+
+	namespace FontReloading
+	{
+		static void (*FrontEndFonts_Load)();
+		static void (*FrontEndFonts_Destroy)();
+
+		static std::once_flag addDestructorOnceFlag;
+
+		template<size_t Index>
+		static void (*orgDestruct_AddDestructor)(void*, void(*)());
+
+		template<size_t Index>
+		static void Destruct_AddDestructor_Once(void* group, void (*func)())
+		{
+			std::call_once(addDestructorOnceFlag, orgDestruct_AddDestructor<Index>, group, func);
+		}
+
+		template<std::size_t Ctr, typename Tuple, std::size_t... I, typename Func>
+		void HookEachImpl_AddDestructor(Tuple&& tuple, std::index_sequence<I...>, Func&& f)
+		{
+			(f(std::get<I>(tuple), orgDestruct_AddDestructor<Ctr << 16 | I>, Destruct_AddDestructor_Once<Ctr << 16 | I>), ...);
+		}
+
+		template<std::size_t Ctr = 0, typename Vars, typename Func>
+		void HookEach_AddDestructor(Vars&& vars, Func&& f)
+		{
+			auto tuple = std::tuple_cat(std::forward<Vars>(vars));
+			HookEachImpl_AddDestructor<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
+		}
+
+		static std::filesystem::path GetLocalizedFontsDir(uint32_t langID)
+		{
+			std::filesystem::path fontsDir = L"fonts\\fonts_";
+			fontsDir += GetLanguageCode(langID);
+
+			if (!std::filesystem::exists(fontsDir))
+			{
+				fontsDir = L"fonts";
+			}
+			return fontsDir;
+		}
+
+		static void (*CMR3Language_SetCurrent)(uint32_t langID);
+		static void CMR3Language_SetCurrent_ReloadFonts(uint32_t langID)
+		{
+			// Assume we are not changing the language the very first frame of the Language screen...
+			static uint32_t lastLangID = langID;
+
+			CMR3Language_SetCurrent(langID);
+
+			if (langID != lastLangID)
+			{
+				if (GetLocalizedFontsDir(langID) != GetLocalizedFontsDir(lastLangID))
+				{
+					FrontEndFonts_Destroy();
+					FrontEndFonts_Load();
+				}
+				lastLangID = langID;
+			}
+		}
 	}
 }
 
@@ -2201,7 +2307,7 @@ namespace Graphics::Patches
 	}
 }
 
-static void ApplyMergedLocalizations()
+static void ApplyMergedLocalizations(const bool HasRegistry)
 {
 	const bool WantsTexts = Version::HasMultipleLocales();
 	const bool WantsCoDrivers = Version::HasMultipleCoDrivers();
@@ -2236,7 +2342,7 @@ static void ApplyMergedLocalizations()
 
 	// Restored languages in Polish
 	// TODO: Tidy up
-	if (HasGameInfo) try
+	if (HasGameInfo && HasRegistry) try
 	{
 		using namespace Localization;
 
@@ -2273,7 +2379,7 @@ static void ApplyMergedLocalizations()
 
 
 	// Multi7 texts
-	if (WantsTexts) try
+	if (WantsTexts && HasRegistry) try
 	{
 		using namespace Localization;
 
@@ -2317,6 +2423,46 @@ static void ApplyMergedLocalizations()
 		}
 
 		auto get_language_code = get_pattern("8B 44 24 04 8B 0C 85 ? ? ? ? 8A 01");
+		auto fonts_load = get_pattern("E8 ? ? ? ? 83 C4 0C 8D 4C 24 0C");
+
+		auto set_language_current = get_pattern("8B 46 24 50 E8 ? ? ? ? 6A 0C E8", 4);
+
+		// Font reloading
+		try
+		{
+			using namespace FontReloading;
+
+			// EFIGS/Polish
+			auto frontend_fonts_load = pattern("83 FE 0D 7C ? 68 ? ? ? ? E8 ? ? ? ? 50 E8").count(2);
+
+			// Read out FrontEndFonts_Destroy from the first match, then wrap both to make them one-time calls
+			FrontEndFonts_Destroy = *frontend_fonts_load.get(0).get<decltype(FrontEndFonts_Destroy)>(5 + 1);
+			FrontEndFonts_Load = static_cast<decltype(FrontEndFonts_Load)>(frontend_fonts_load.get(0).get<void>(-0x24));
+
+			std::array<void*, 2> add_destructor = {
+				frontend_fonts_load.get(0).get<void>(16),
+				frontend_fonts_load.get(1).get<void>(16),
+			};
+			HookEach_AddDestructor(add_destructor, InterceptCall);
+		}
+		catch (const hook::txn_exception&)
+		{
+			using namespace FontReloading;
+
+			// Czech
+			auto frontend_fonts_load = pattern("47 81 FE ? ? ? ? 7C ? 68 ? ? ? ? E8 ? ? ? ? 50 E8").count(2);
+
+			// Read out FrontEndFonts_Destroy from the first match, then wrap both to make them one-time calls
+			FrontEndFonts_Destroy = *frontend_fonts_load.get(0).get<decltype(FrontEndFonts_Destroy)>(9 + 1);
+			FrontEndFonts_Load = static_cast<decltype(FrontEndFonts_Load)>(frontend_fonts_load.get(0).get<void>(-0x27));
+
+			std::array<void*, 2> add_destructor = {
+				frontend_fonts_load.get(0).get<void>(20),
+				frontend_fonts_load.get(1).get<void>(20),
+			};
+			HookEach_AddDestructor(add_destructor, InterceptCall);
+		}
+		InterceptCall(set_language_current, FontReloading::CMR3Language_SetCurrent, FontReloading::CMR3Language_SetCurrent_ReloadFonts);
 
 		for (void* addr : num_languages_int32)
 		{
@@ -2334,6 +2480,7 @@ static void ApplyMergedLocalizations()
 
 		InjectHook(get_language_code, GetLanguageCode, PATCH_JUMP);
 		InjectHook(get_language_id_by_code, GetLanguageIDByCode, PATCH_JUMP);
+		InjectHook(fonts_load, sprintf_RegionalFont);
 
 		Menus::Patches::MultipleTextsPatched = true;
 
@@ -4233,7 +4380,7 @@ static void ApplyPatches(const bool HasRegistry)
 
 	
 	// Install the locale pack (if applicable)
-	ApplyMergedLocalizations();
+	ApplyMergedLocalizations(HasRegistry);
 }
 
 void OnInitializeHook()
