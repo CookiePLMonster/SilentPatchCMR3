@@ -53,6 +53,19 @@ namespace Localization
 	void* gpLanguageData[NUM_LOCALES];
 	const char* gpszCountryInitials[NUM_LOCALES] = { "E", "F", "S", "G", "I", "P", "C" };
 
+	const char* szCreditsFiles[NUM_LOCALES] = {
+		"\\Data\\frontend\\CreditsE.txt",
+		"\\Data\\frontend\\CreditsF.txt",
+		"\\Data\\frontend\\CreditsS.txt",
+		"\\Data\\frontend\\CreditsG.txt",
+		"\\Data\\frontend\\CreditsI.txt",
+		"\\Data\\frontend\\CreditsP.txt",
+		"\\Data\\frontend\\CreditsC.txt",
+	};
+
+	void* gpCreditsGroups[NUM_LOCALES];
+	void* gpCreditsFileData[NUM_LOCALES];
+
 	char GetLangFromRegistry()
 	{
 		return Registry::GetRegistryChar(Registry::REGISTRY_SECTION_NAME, L"LANGUAGE").value_or('E');
@@ -2387,6 +2400,18 @@ static void ApplyMergedLocalizations(const bool HasRegistry)
 		void* num_languages_int32[] = {
 			get_pattern("8D 4C 24 08 BF 05 00 00 00", 4 + 1),
 			get_pattern("BF 05 00 00 00 56 E8 ? ? ? ? 46", 1),
+
+			// Credits
+			get_pattern("33 F6 BB 05 00 00 00", 2 + 1),
+			[] {
+				try {
+					// EFIGS/Polish
+					return get_pattern("33 FF C7 44 24 ? 05 00 00 00 56", 2 + 4);
+				} catch (const hook::txn_exception&) {
+					// Czech
+					return get_pattern("33 ED C7 44 24 ? 05 00 00 00", 2 + 4);
+				}
+				}(),
 		};
 
 		auto language_data1 = pattern("8B 0C 85 ? ? ? ? 8D 34 85").get_one();
@@ -2426,6 +2451,36 @@ static void ApplyMergedLocalizations(const bool HasRegistry)
 		auto fonts_load = get_pattern("E8 ? ? ? ? 83 C4 0C 8D 4C 24 0C");
 
 		auto set_language_current = get_pattern("8B 46 24 50 E8 ? ? ? ? 6A 0C E8", 4);
+
+		auto credits_files = get_pattern("8B 0C B5 ? ? ? ? 8D 44 24 0C", 3);
+
+		// For credits, use range checks to patch 25+ references to the array
+		auto credits_patches_start = get_pattern_uintptr("2B C2 8B 5C 24 18");
+		auto credits_patches_end = get_pattern_uintptr("A1 ? ? ? ? 85 C0 7E 1E");
+		// Sanity check - if somehow end comes before start, treat it as a failure
+		if (credits_patches_start >= credits_patches_end)
+		{
+			throw hook::txn_exception();
+		}
+		auto getCreditsPattern = [credits_patches_start, credits_patches_end](void* val)
+		{
+			uint8_t bytes[4];
+			memcpy(bytes, &val, sizeof(bytes));
+
+			const uint8_t mask[4] = { 0xFF, 0xFF, 0xFF, 0xFF };
+			return pattern(credits_patches_start, credits_patches_end, std::basic_string_view<uint8_t>(bytes, std::size(bytes)),
+				std::basic_string_view<uint8_t>(mask, std::size(mask)));
+		};
+
+		auto credits_globals = pattern(credits_patches_start, credits_patches_end, "68 ? ? ? ? 89 3C B5 ? ? ? ? 89 3C B5").get_one();
+		auto credits_groups = getCreditsPattern(*credits_globals.get<void*>(5 + 3));
+		auto credits_file_data = getCreditsPattern(*credits_globals.get<void*>(12 + 3));
+
+		// Scan immediately and bail out if either scan fails
+		if (credits_groups.empty() || credits_file_data.empty())
+		{
+			throw hook::txn_exception();
+		}
 
 		// Font reloading
 		try
@@ -2477,10 +2532,20 @@ static void ApplyMergedLocalizations(const bool HasRegistry)
 		{
 			Patch(addr, &gpszCountryInitials);
 		}
+		Patch(credits_files, &szCreditsFiles);
 
 		InjectHook(get_language_code, GetLanguageCode, PATCH_JUMP);
 		InjectHook(get_language_id_by_code, GetLanguageIDByCode, PATCH_JUMP);
 		InjectHook(fonts_load, sprintf_RegionalFont);
+
+		credits_groups.for_each_result([](pattern_match match)
+		{
+			Patch<const void*>(match.get<void>(), &gpCreditsGroups);
+		});
+		credits_file_data.for_each_result([](pattern_match match)
+		{
+			Patch<const void*>(match.get<void>(), &gpCreditsFileData);
+		});
 
 		Menus::Patches::MultipleTextsPatched = true;
 

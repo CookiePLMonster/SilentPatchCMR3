@@ -100,6 +100,14 @@ static void DetectGameFilesStuff()
 			L"Data/strings/Whole_I.Lng",
 			L"Data/strings/Whole_P.Lng",
 			L"Data/strings/Whole_S.Lng",
+
+			L"Data/frontend/CreditsC.txt",
+			L"Data/frontend/CreditsE.txt",
+			L"Data/frontend/CreditsF.txt",
+			L"Data/frontend/CreditsG.txt",
+			L"Data/frontend/CreditsI.txt",
+			L"Data/frontend/CreditsP.txt",
+			L"Data/frontend/CreditsS.txt",
 		};
 
 		bool textsPresent = true;
