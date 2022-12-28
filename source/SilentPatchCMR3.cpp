@@ -4221,6 +4221,16 @@ static void ApplyPatches(const bool HasRegistry)
 	}
 	TXN_CATCH();
 
+
+	// Blog link in Secrets screen
+	try
+	{
+		// English/Czech only, Polish uses a translation string
+		auto codemasters_url = get_pattern("68 13 01 00 00 68 40 01 00 00 68 ? ? ? ? 6A 0C E8", 10 + 1);
+		Patch(codemasters_url, BONUSCODES_URL);
+	}
+	TXN_CATCH();
+
 	
 	// Install the locale pack (if applicable)
 	ApplyMergedLocalizations();

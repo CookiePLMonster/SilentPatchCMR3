@@ -1,5 +1,6 @@
 #include "Language.h"
 
+#include "Globals.h"
 #include "Version.h"
 
 #include <map>
@@ -18,9 +19,14 @@ static std::map<uint32_t, const char*> GetOverrideStrings()
 {
 	std::map<uint32_t, const char*> result;
 
-	if (Version::HasJanuszWituchVoiceLines())
+	if (!Version::HasMultipleCoDrivers() && Version::HasJanuszWituchVoiceLines())
 	{
 		result.emplace(447, "JANUSZ WITUCH");
+	}
+
+	if (!Version::HasMultipleLocales() && Version::IsPolish())
+	{
+		result.emplace(802, BONUSCODES_URL);
 	}
 
 	return result;
