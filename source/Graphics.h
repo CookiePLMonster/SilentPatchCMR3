@@ -295,7 +295,7 @@ inline void (*Core_Blitter2D_Line2D_G)(BlitLine2D_G* lines, uint32_t numLines);
 inline void (*HandyFunction_Draw2DBox)(int posX, int posY, int width, int height, int color);
 inline void (*HandyFunction_Draw2DLineFromTo)(float x1, float y1, float x2, float y2, uint32_t* z, uint32_t color);
 inline int (*HandyFunction_Clip2DRect)(BlitRect2D_G* rect, float x1, float y1, float x2, float y2);
-inline void (*CMR3Font_BlitText)(uint8_t fontID, const char* text, int posX, int posY, int a5, char a6);
+inline void (*CMR3Font_BlitText)(uint8_t fontID, const char* text, int16_t posX, int16_t posY, uint32_t color, int align);
 inline int (*CMR3Font_GetTextWidth)(uint8_t fontID, const char* text);
 
 inline void (*Keyboard_DrawTextEntryBox)(int posX, int posY, int a3, int a4, uint32_t a5, int a6);
@@ -347,8 +347,8 @@ void HandyFunction_Draw2DBox_Center(int posX, int posY, int width, int height, i
 void HandyFunction_Draw2DBox_RightAlign(int posX, int posY, int width, int height, int color);
 void HandyFunction_Draw2DLineFromTo_Center(float x1, float y1, float x2, float y2, uint32_t* z, uint32_t color);
 
-void CMR3Font_BlitText_Center(uint8_t a1, const char* text, int posX, int posY, int a5, char a6);
-void CMR3Font_BlitText_RightAlign(uint8_t a1, const char* text, int posX, int posY, int a5, char a6);
+void CMR3Font_BlitText_Center(uint8_t a1, const char* text, int16_t posX, int16_t posY, uint32_t color, int align);
+void CMR3Font_BlitText_RightAlign(uint8_t a1, const char* text, int16_t posX, int16_t posY, uint32_t color, int align);
 
 void Keyboard_DrawTextEntryBox_Center(int posX, int posY, int a3, int a4, uint32_t a5, int a6);
 

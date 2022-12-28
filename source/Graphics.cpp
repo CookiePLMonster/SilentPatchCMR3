@@ -174,18 +174,18 @@ void HandyFunction_Draw2DLineFromTo_Center(float x1, float y1, float x2, float y
 	HandyFunction_Draw2DLineFromTo((scaledWidth / 2.0f) + x1 - 320.0f, y1, (scaledWidth / 2.0f) + x2 - 320.0f, y2, z, color);
 }
 
-void CMR3Font_BlitText_Center(uint8_t a1, const char* text, int posX, int posY, int a5, char a6)
+void CMR3Font_BlitText_Center(uint8_t a1, const char* text, int16_t posX, int16_t posY, uint32_t color, int align)
 {
 	const float scaledWidth = GetScaledResolutionWidth();
 	const int offset = posX - 320;
-	CMR3Font_BlitText(a1, text, static_cast<int>(scaledWidth / 2 + offset), posY, a5, a6);
+	CMR3Font_BlitText(a1, text, static_cast<int16_t>(scaledWidth / 2 + offset), posY, color, align);
 }
 
-void CMR3Font_BlitText_RightAlign(uint8_t a1, const char* text, int posX, int posY, int a5, char a6)
+void CMR3Font_BlitText_RightAlign(uint8_t a1, const char* text, int16_t posX, int16_t posY, uint32_t color, int align)
 {
 	const float scaledWidth = GetScaledResolutionWidth();
 	const int offset = 640 - posX;
-	CMR3Font_BlitText(a1, text, static_cast<int>(scaledWidth - offset), posY, a5, a6);
+	CMR3Font_BlitText(a1, text, static_cast<int16_t>(scaledWidth - offset), posY, color, align);
 }
 
 void Keyboard_DrawTextEntryBox_Center(int posX, int posY, int a3, int a4, uint32_t a5, int a6)

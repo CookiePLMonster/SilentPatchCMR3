@@ -578,10 +578,10 @@ namespace SPText
 	{
 		const uint32_t alpha = color & 0xFF000000;
 
-		const uint32_t ScreenEdge = static_cast<uint32_t>(GetScaledResolutionWidth());
+		const int16_t ScreenEdge = static_cast<int16_t>(GetScaledResolutionWidth());
 		const static std::string DISCLAIMER_TEXT(BuildTextInternal());
 
-		const uint32_t DROP_SHADOW_WIDTH = 1;
+		constexpr int16_t DROP_SHADOW_WIDTH = 1;
 		CMR3Font_BlitText(0, DISCLAIMER_TEXT.c_str(), ScreenEdge - 10 + DROP_SHADOW_WIDTH, 10, alpha, 4);
 		CMR3Font_BlitText(0, DISCLAIMER_TEXT.c_str(), ScreenEdge - 10 - DROP_SHADOW_WIDTH, 10, alpha, 4);
 		CMR3Font_BlitText(0, DISCLAIMER_TEXT.c_str(), ScreenEdge - 10, 10 + DROP_SHADOW_WIDTH, alpha, 4);
@@ -1507,9 +1507,9 @@ namespace ConstantViewports
 	}
 }
 
-void CMR3Font_BlitText_CalibrateAxisName(uint8_t a1, const char* text, int /*posX*/, int posY, int a5, char /*a6*/)
+void CMR3Font_BlitText_CalibrateAxisName(uint8_t a1, const char* text, int16_t /*posX*/, int16_t posY, uint32_t color, int /*align*/)
 {
-	CMR3Font_BlitText_Center(a1, text, 140, posY + 10, a5, 0x14);
+	CMR3Font_BlitText_Center(a1, text, 140, posY + 10, color, 0x14);
 }
 
 namespace ScaledTexturesSupport
@@ -3411,6 +3411,10 @@ static void ApplyPatches(const bool HasRegistry)
 
 			// Dirty disc error
 			centered_blit_texts.emplace_back(get_pattern("E8 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? EB BB"));
+
+			// Credits
+			centered_blit_texts.emplace_back(get_pattern("6A 0C E8 ? ? ? ? 8B 2D", 2));
+			centered_blit_texts.emplace_back(get_pattern("6A 0C E8 ? ? ? ? 8B 0D ? ? ? ? 8B 2D", 2));
 
 			auto splitscreen_4th_viewport_rect2d = get_pattern("DD D8 E8 ? ? ? ? 8B 7C 24 30", 2);
 

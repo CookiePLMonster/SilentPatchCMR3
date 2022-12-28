@@ -460,14 +460,14 @@ void PC_GraphicsAdvanced_DisplayOnOff(MenuDefinition* /*menu*/, const char* opti
 	sprintf_s(buf, " %s ", offText);
 	if (displayBoth || value == 0)
 	{
-		CMR3Font_BlitText_RightAlign(0, buf, currentPosX, posY, HandyFunction_AlphaCombineFlat(offColor, static_cast<uint32_t>(interp * interp * 255.0f)), 9);
+		CMR3Font_BlitText_RightAlign(0, buf, static_cast<int16_t>(currentPosX), static_cast<int16_t>(posY), HandyFunction_AlphaCombineFlat(offColor, static_cast<uint32_t>(interp * interp * 255.0f)), 9);
 		currentPosX += CMR3Font_GetTextWidth(0, buf);
 	}
 
 	if (displayBoth || value != 0)
 	{
 		sprintf_s(buf, displayBoth ?  "%s " : " %s ", onText);
-		CMR3Font_BlitText_RightAlign(0, buf, currentPosX, posY, HandyFunction_AlphaCombineFlat(onColor, static_cast<uint32_t>(interp * interp * 255.0f)), 9);
+		CMR3Font_BlitText_RightAlign(0, buf, static_cast<int16_t>(currentPosX), static_cast<int16_t>(posY), HandyFunction_AlphaCombineFlat(onColor, static_cast<uint32_t>(interp * interp * 255.0f)), 9);
 	}
 }
 
@@ -485,9 +485,9 @@ void PC_GraphicsOptions_Display_NewOptions(MenuDefinition* menu, float interp, u
 		const char* horizontalText = Language_GetString(269);
 		sprintf_s(buf, "%s ", horizontalText);
 		const int horizontalTextLength = CMR3Font_GetTextWidth(0, buf);
-		CMR3Font_BlitText_RightAlign(0, buf, splitScreenTextLength + 393, posY, HandyFunction_AlphaCombineFlat(offColor, interpValue), 9);
+		CMR3Font_BlitText_RightAlign(0, buf, static_cast<int16_t>(splitScreenTextLength + 393), static_cast<int16_t>(posY), HandyFunction_AlphaCombineFlat(offColor, interpValue), 9);
 
-		CMR3Font_BlitText_RightAlign(0, Language_GetString(270), splitScreenTextLength + horizontalTextLength + 393, posY, HandyFunction_AlphaCombineFlat(onColor, interpValue), 9);
+		CMR3Font_BlitText_RightAlign(0, Language_GetString(270), static_cast<int16_t>(splitScreenTextLength + horizontalTextLength + 393), static_cast<int16_t>(posY), HandyFunction_AlphaCombineFlat(onColor, interpValue), 9);
 		break;
 	}
 	case EntryID::GRAPHICS_TACHO:
@@ -499,9 +499,9 @@ void PC_GraphicsOptions_Display_NewOptions(MenuDefinition* menu, float interp, u
 		const char* horizontalText = Language_GetString(884);
 		sprintf_s(buf, "%s ", horizontalText);
 		const int horizontalTextLength = CMR3Font_GetTextWidth(0, buf);
-		CMR3Font_BlitText_RightAlign(0, buf, splitScreenTextLength + 393, posY, HandyFunction_AlphaCombineFlat(offColor, interpValue), 9);
+		CMR3Font_BlitText_RightAlign(0, buf, static_cast<int16_t>(splitScreenTextLength + 393), static_cast<int16_t>(posY), HandyFunction_AlphaCombineFlat(offColor, interpValue), 9);
 
-		CMR3Font_BlitText_RightAlign(0, Language_GetString(883), splitScreenTextLength + horizontalTextLength + 393, posY, HandyFunction_AlphaCombineFlat(onColor, interpValue), 9);
+		CMR3Font_BlitText_RightAlign(0, Language_GetString(883), static_cast<int16_t>(splitScreenTextLength + horizontalTextLength + 393), static_cast<int16_t>(posY), HandyFunction_AlphaCombineFlat(onColor, interpValue), 9);
 		break;
 	}
 	case EntryID::GRAPHICS_EXTERIOR_FOV:
