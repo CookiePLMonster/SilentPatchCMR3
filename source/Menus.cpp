@@ -27,6 +27,33 @@ static int32_t GetResolutionEntryFormatID(const MenuResolutionEntry* entry)
 	return -1;
 }
 
+static void PatchOSDKeyboard(MenuDefinition* menu)
+{
+	if (Menus::Patches::MultipleTextsPatched)
+	{
+		// Pick a keyboard depending on the selected language
+		if (GameInfo_GetTextLanguage() == TEXT_LANG_POLISH)
+		{
+			menu->m_entries[0].m_entryDataString = "1234567890";
+			menu->m_entries[1].m_entryDataString = "A" "\xA5" "BC" "\xC6" "DE" "\xCA" "FGHIJ";
+			menu->m_entries[2].m_entryDataString = "KL" "\xA3" "MN" "\xD1" "O" "\xD3" "PQRS" "\x8C" "T";
+			menu->m_entries[3].m_entryDataString = "UVWXYZ" "\x8F\xAF" ".,<#";
+		}
+		else
+		{
+			menu->m_entries[0].m_entryDataString = "1234567890";
+			menu->m_entries[1].m_entryDataString = "ABCDEFGHIJ";
+			menu->m_entries[2].m_entryDataString = "KLMNOPQRST";
+			menu->m_entries[3].m_entryDataString = "UVWXYZ.,<#";
+		}
+
+		for (size_t i = 0; i < 4; i++)
+		{
+			menu->m_entries[i].m_entryDataInt = std::strlen(menu->m_entries[i].m_entryDataString);
+		}
+	}
+}
+
 static constexpr int FOV_MIN = 30;
 static constexpr int FOV_MAX = 150;
 static constexpr int FOV_STEP = 5;
@@ -168,6 +195,14 @@ void FrontEndMenuSystem_SetupMenus_Custom(int languagesOnly)
 
 		menu.m_numEntries = EntryID::GRAPHICS_ADV_NUM;
 	}
+
+	PatchOSDKeyboard(&gmoFrontEndMenus[2]);
+	PatchOSDKeyboard(&gmoFrontEndMenus[32]);
+}
+
+void ResultsMenuSystem_Initialise_Custom()
+{
+	PatchOSDKeyboard(&gmoResultsMenus[12]);
 }
 
 uint32_t PC_GraphicsAdvanced_ComputePresetQuality()

@@ -137,6 +137,7 @@ inline void (*DrawLeftRightArrows)(MenuDefinition* menu, uint32_t entryID, float
 void DrawLeftRightArrows_RightAlign(MenuDefinition* menu, uint32_t entryID, float interp, int leftArrow, int rightArrow, uint32_t posY);
 
 void FrontEndMenuSystem_SetupMenus_Custom(int languagesOnly);
+void ResultsMenuSystem_Initialise_Custom();
 
 uint32_t PC_GraphicsAdvanced_ComputePresetQuality();
 void PC_GraphicsAdvanced_SetGraphicsFromPresetQuality();
@@ -161,6 +162,7 @@ void PC_GraphicsOptions_Exit_NewOptions(MenuDefinition* menu, int a2);
 inline int* gnCurrentAdapter;
 
 inline MenuDefinition* gmoFrontEndMenus;
+inline MenuDefinition* gmoResultsMenus;
 //inline MenuDefinition** gpCurrentMenu;
 
 namespace Menus::Patches

@@ -99,7 +99,7 @@ namespace Localization
 	static void (*orgSetMeasurementSystem_Defaults)(bool bImperial);
 	void SetMeasurementSystem_Defaults()
 	{
-		orgSetMeasurementSystem_Defaults(GameInfo_GetTextLanguage() == 0);
+		orgSetMeasurementSystem_Defaults(GameInfo_GetTextLanguage() == TEXT_LANG_ENGLISH);
 	}
 
 	template<std::size_t Index>
@@ -108,7 +108,7 @@ namespace Localization
 	template<std::size_t Index>
 	void SetMeasurementSystem_FromLanguage(bool)
 	{
-		orgSetMeasurementSystem<Index>(GameInfo_GetTextLanguage() == 0);
+		orgSetMeasurementSystem<Index>(GameInfo_GetTextLanguage() == TEXT_LANG_ENGLISH);
 	}
 
 	template<std::size_t Ctr, typename Tuple, std::size_t... I, typename Func>
@@ -147,11 +147,11 @@ namespace Localization
 			{
 				if (Version::IsPolish())
 				{
-					langID = 5;
+					langID = TEXT_LANG_POLISH;
 				}
-				else if (Version::IsCzech() && langID == 2)
+				else if (Version::IsCzech() && langID == TEXT_LANG_SPANISH)
 				{
-					langID = 6;
+					langID = TEXT_LANG_CZECH;
 				}
 			}
 
@@ -2464,17 +2464,40 @@ namespace Menus::Patches
 		FrontEndMenuSystem_SetupMenus_Custom(languagesOnly);
 	}
 
+	template<std::size_t Index>
+	void (*orgResultsMenuSystem_Initialise)();
+
+	template<std::size_t Index>
+	void ResultsMenuSystem_Initialise()
+	{
+		orgResultsMenuSystem_Initialise<Index>();
+		ResultsMenuSystem_Initialise_Custom();
+	}
+
 	template<std::size_t Ctr, typename Tuple, std::size_t... I, typename Func>
-	void HookEachImpl(Tuple&& tuple, std::index_sequence<I...>, Func&& f)
+	void HookEachImpl_FrontEndMenus(Tuple&& tuple, std::index_sequence<I...>, Func&& f)
 	{
 		(f(std::get<I>(tuple), orgFrontEndMenuSystem_SetupMenus<Ctr << 16 | I>, FrontEndMenuSystem_SetupMenus<Ctr << 16 | I>), ...);
 	}
 
 	template<std::size_t Ctr = 0, typename Vars, typename Func>
-	void HookEach(Vars&& vars, Func&& f)
+	void HookEach_FrontEndMenus(Vars&& vars, Func&& f)
 	{
 		auto tuple = std::tuple_cat(std::forward<Vars>(vars));
-		HookEachImpl<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
+		HookEachImpl_FrontEndMenus<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
+	}
+
+	template<std::size_t Ctr, typename Tuple, std::size_t... I, typename Func>
+	void HookEachImpl_ResultMenus(Tuple&& tuple, std::index_sequence<I...>, Func&& f)
+	{
+		(f(std::get<I>(tuple), orgResultsMenuSystem_Initialise<Ctr << 16 | I>, ResultsMenuSystem_Initialise<Ctr << 16 | I>), ...);
+	}
+
+	template<std::size_t Ctr = 0, typename Vars, typename Func>
+	void HookEach_ResultMenus(Vars&& vars, Func&& f)
+	{
+		auto tuple = std::tuple_cat(std::forward<Vars>(vars));
+		HookEachImpl_ResultMenus<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
 	}
 }
 
@@ -2505,7 +2528,7 @@ namespace Graphics::Patches
 	}
 }
 
-static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFrontEnd, const bool HasGameInfo, const bool HasLanguageHook)
+static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFrontEnd, const bool HasGameInfo, const bool HasLanguageHook, const bool HasKeyboard)
 {
 	const bool WantsTexts = Version::HasMultipleLocales();
 	const bool WantsCoDrivers = Version::HasMultipleCoDrivers();
@@ -2734,6 +2757,18 @@ static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFront
 			ReadCall(set_measurement_system, orgSetMeasurementSystem_Defaults);
 			InjectHook(set_defaults.get<void>(), SetMeasurementSystem_Defaults);
 			Nop(set_defaults.get<void>(5 + 2), 6);
+		}
+		TXN_CATCH();
+
+		// Multilanguage typing input
+		if (HasKeyboard && HasGameInfo) try
+		{
+			auto convert_scan_code_to_char = pattern("53 55 E8 ? ? ? ? 0F BE").count(3);
+
+			convert_scan_code_to_char.for_each_result([](pattern_match match)
+			{
+				InjectHook(match.get<void>(2), Keyboard_ConvertScanCodeToCharLocalised);
+			});
 		}
 		TXN_CATCH();
 	}
@@ -3082,8 +3117,11 @@ static void ApplyPatches(const bool HasRegistry)
 	try
 	{
 		auto draw_text_entry_box = get_pattern("56 3B C3 57 0F 84 ? ? ? ? DB 84 24", -0xD);
+		auto keyboard_data = *get_pattern<uint8_t*>("81 E2 FF 00 00 00 88 90 ? ? ? ? 40", 6 + 2);
 
 		Keyboard_DrawTextEntryBox = reinterpret_cast<decltype(Keyboard_DrawTextEntryBox)>(draw_text_entry_box);
+		gKeyboardData = keyboard_data;
+
 		HasKeyboard = true;
 	}
 	TXN_CATCH();
@@ -3127,9 +3165,11 @@ static void ApplyPatches(const bool HasRegistry)
 	try
 	{
 		auto menus = *get_pattern<MenuDefinition*>("C7 05 ? ? ? ? ? ? ? ? 89 3D ? ? ? ? 89 35", 2+4);
+		auto results_menus = *get_pattern<MenuDefinition*>("5D B8 ? ? ? ? 5B 83 C4 08 C2 0C 00", 1+1);
 		//auto current_menu = *get_pattern<MenuDefinition**>("89 44 24 ? A1 ? ? ? ? 3D", 4+1);
 
 		gmoFrontEndMenus = menus;
+		gmoResultsMenus = results_menus;
 		//gpCurrentMenu = current_menu;
 
 		HasFrontEnd = true;
@@ -3189,7 +3229,7 @@ static void ApplyPatches(const bool HasRegistry)
 
 	// Menu changes
 	bool HasMenuHook = false;
-	if (HasFrontEnd) try
+	if (HasFrontEnd && HasGameInfo) try
 	{
 		using namespace Menus::Patches;
 
@@ -3210,6 +3250,11 @@ static void ApplyPatches(const bool HasRegistry)
 			get_pattern("E8 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? 50 E8 ? ? ? ? 50"),
 		};
 
+		std::array<void*, 2> update_results_menu_entries = {
+			get_pattern("E8 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? C7 05"),
+			get_pattern("89 15 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? 85 C0", 6),
+		};
+
 		gnCurrentAdapter = *get_pattern<int*>("A3 ? ? ? ? 56 50", 1);
 		PC_GraphicsAdvanced_PopulateFromCaps = reinterpret_cast<decltype(PC_GraphicsAdvanced_PopulateFromCaps)>([] {
 			try
@@ -3223,7 +3268,8 @@ static void ApplyPatches(const bool HasRegistry)
 			}
 		}());
 
-		HookEach(update_menu_entries, InterceptCall);
+		HookEach_FrontEndMenus(update_menu_entries, InterceptCall);
+		HookEach_ResultMenus(update_results_menu_entries, InterceptCall);
 		HasMenuHook = true;
 
 		// This only matches in the Polish executable
@@ -4710,7 +4756,7 @@ static void ApplyPatches(const bool HasRegistry)
 
 	
 	// Install the locale pack (if applicable)
-	ApplyMergedLocalizations(HasRegistry, HasFrontEnd, HasGameInfo, HasLanguageHook);
+	ApplyMergedLocalizations(HasRegistry, HasFrontEnd, HasGameInfo, HasLanguageHook, HasKeyboard);
 }
 
 void OnInitializeHook()
