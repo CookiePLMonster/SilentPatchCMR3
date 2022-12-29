@@ -81,20 +81,17 @@ void DrawLeftRightArrows_RightAlign(MenuDefinition* menu, uint32_t entryID, floa
 
 void FrontEndMenuSystem_SetupMenus_Custom(int languagesOnly)
 {
-	if (Version::IsPolish() && Version::HasNickyGristFiles())
+	if (Version::IsPolish() && (Version::HasNickyGristFiles() || Menus::Patches::MultipleTextsPatched))
 	{
 		// Re-enable Languages screen
 		gmoFrontEndMenus[17].m_entries[3].m_canBeSelected = 1;
 		gmoFrontEndMenus[17].m_entries[3].m_isDisplayed = 1;
 
-
-		// TODO: Do this only if there are multiple languages installed
-		// Re-enable TEXT
-		if (languagesOnly == 0)
+		if (!Menus::Patches::MultipleTextsPatched && languagesOnly == 0)
 		{
 			// Same as the original hack, but done only once to fix an original animations bug
-			//gmoFrontEndMenus[29].m_curScrollTopEntry = 1;
-			//gmoFrontEndMenus[29].m_curEntry = 1;
+			gmoFrontEndMenus[29].m_curScrollTopEntry = 1;
+			gmoFrontEndMenus[29].m_curEntry = 1;
 		}
 	}
 

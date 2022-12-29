@@ -24,9 +24,18 @@ static std::map<uint32_t, const char*> GetOverrideStrings()
 		result.emplace(447, "JANUSZ WITUCH");
 	}
 
-	if (!Version::HasMultipleLocales() && Version::IsPolish())
+	if (!Version::HasMultipleLocales())
 	{
-		result.emplace(802, BONUSCODES_URL);
+		if (Version::IsPolish())
+		{
+			result.emplace(802, BONUSCODES_URL);
+		}
+
+		if (Version::IsCzech())
+		{
+			// Original Czech string for "NA" is broken, as it was unused before
+			result.emplace(994, "ND");
+		}
 	}
 
 	return result;
@@ -44,6 +53,9 @@ static std::map<uint32_t, const char*> GetNewStrings()
 		{ 1024, "HOME" }, { 1025, "PGUP" }, { 1026, "DEL" }, { 1027, "END" },
 		{ 1028, "PGDN" }, { 1029, "RIGHT" }, { 1030, "LEFT" }, { 1031, "UP" },
 		{ 1032, "DOWN" }, { 1033, "[?]" },
+
+		// TODO: Translate those to Polish if loc pack is not installed
+		{ RETURN_TO_CENTRE, "RETURN TO CENTRE" },
 
 		{ LANGUAGE_POLISH, "POLSKI" },
 		{ LANGUAGE_CZECH, "\xC3" "ESKY" },
@@ -69,24 +81,23 @@ static std::map<uint32_t, const char*> GetNewStrings()
 
 const char* Language_GetString(uint32_t ID)
 {
-	static const std::map<uint32_t, const char*> overrideStrings = GetOverrideStrings();
-	auto it = overrideStrings.find(ID);
-	if (it != overrideStrings.end())
-	{
-		return it->second;
-	}
-
 	// Original code with bounds check added
 	const LangFile* language = *gpCurrentLanguage;
 	if (ID < language->m_numFiles)
 	{
+		static const std::map<uint32_t, const char*> overrideStrings = GetOverrideStrings();
+		auto it = overrideStrings.find(ID);
+		if (it != overrideStrings.end())
+		{
+			return it->second;
+		}
 		return language->m_texts[ID];
 	}
 
 	// All strings that were hardcoded in the English release, but translated in the Polish release
 	// + new strings for options
 	static const std::map<uint32_t, const char*> newLocalizedStrings = GetNewStrings();
-	it = newLocalizedStrings.find(ID);
+	auto it = newLocalizedStrings.find(ID);
 	if (it != newLocalizedStrings.end())
 	{
 		return it->second;

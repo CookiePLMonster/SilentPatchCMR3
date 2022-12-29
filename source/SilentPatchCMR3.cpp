@@ -669,6 +669,135 @@ namespace ConsistentLanguagesScreen
 	}
 }
 
+namespace MoreTranslatableStrings
+{
+	// NA string in the Telemetry screen
+	int __cdecl sprintf_na(char* Buffer, const char* /*Format*/, const char* str, int num)
+	{
+		return sprintf_s(Buffer, 512, "%s #%d: %s", str, num, Language_GetString(994));
+	}
+
+	// Localized keyboard key names
+	static char (*Keyboard_ConvertScanCodeToChar)(int keyID, int a2, int a3);
+	int Keyboard_ConvertScanCodeToString(int keyID, char* buffer)
+	{
+		buffer[0] = '\0';
+		char keyName = Keyboard_ConvertScanCodeToChar(keyID, 0, 0);
+		if (keyName != '\0')
+		{
+			buffer[0] = keyName;
+			buffer[1] = '\0';
+			return 1;
+		}
+
+		switch ( keyID )
+		{
+		case 1:
+			strcpy_s(buffer, 256, Language_GetString(1005));
+			return 1;
+		case 14:
+			strcpy_s(buffer, 256, Language_GetString(1006));
+			return 1;
+		case 15:
+			strcpy_s(buffer, 256, Language_GetString(1007));
+			return 1;
+		case 28:
+			strcpy_s(buffer, 256, Language_GetString(1004));
+			return 1;
+		case 59:
+			strcpy_s(buffer, 256, Language_GetString(1008));
+			return 1;
+		case 60:
+			strcpy_s(buffer, 256, Language_GetString(1009));
+			return 1;
+		case 61:
+			strcpy_s(buffer, 256, Language_GetString(1010));
+			return 1;
+		case 62:
+			strcpy_s(buffer, 256, Language_GetString(1011));
+			return 1;
+		case 63:
+			strcpy_s(buffer, 256, Language_GetString(1012));
+			return 1;
+		case 64:
+			strcpy_s(buffer, 256, Language_GetString(1013));
+			return 1;
+		case 65:
+			strcpy_s(buffer, 256, Language_GetString(1014));
+			return 1;
+		case 66:
+			strcpy_s(buffer, 256, Language_GetString(1015));
+			return 1;
+		case 67:
+			strcpy_s(buffer, 256, Language_GetString(1016));
+			return 1;
+		case 68:
+			strcpy_s(buffer, 256, Language_GetString(1017));
+			return 1;
+		case 70:
+			strcpy_s(buffer, 256, Language_GetString(1021));
+			return 1;
+		case 87:
+			strcpy_s(buffer, 256, Language_GetString(1018));
+			return 1;
+		case 88:
+			strcpy_s(buffer, 256, Language_GetString(1019));
+			return 1;
+		case 183:
+			strcpy_s(buffer, 256, Language_GetString(1020));
+			return 1;
+		case 197:
+			strcpy_s(buffer, 256, Language_GetString(1022));
+			return 1;
+		case 199:
+			strcpy_s(buffer, 256, Language_GetString(1024));
+			return 1;
+		case 200:
+			strcpy_s(buffer, 256, Language_GetString(1031));
+			return 1;
+		case 201:
+			strcpy_s(buffer, 256, Language_GetString(1025));
+			return 1;
+		case 203:
+			strcpy_s(buffer, 256, Language_GetString(1030));
+			return 1;
+		case 205:
+			strcpy_s(buffer, 256, Language_GetString(1029));
+			return 1;
+		case 207:
+			strcpy_s(buffer, 256, Language_GetString(1027));
+			return 1;
+		case 208:
+			strcpy_s(buffer, 256, Language_GetString(1032));
+			return 1;
+		case 209:
+			strcpy_s(buffer, 256, Language_GetString(1028));
+			return 1;
+		case 210:
+			strcpy_s(buffer, 256, Language_GetString(1023));
+			return 1;
+		case 211:
+			strcpy_s(buffer, 256, Language_GetString(1026));
+			return 1;
+		default:
+			strcpy_s(buffer, 256, Language_GetString(1033));
+			break;
+		}
+		return 0;
+	}
+
+	// Localized "Return to Centre"
+	int __cdecl sprintf_returntocentre1(char* Buffer, const char* Format, const char* /*str*/)
+	{
+		return sprintf_s(Buffer, 256, Format, Language_GetString(Language::RETURN_TO_CENTRE));
+	}
+
+	int __cdecl sprintf_returntocentre2(char* Buffer, const char* Format, const char* /*str1*/, const char* str2)
+	{
+		return sprintf_s(Buffer, 512, Format, Language_GetString(Language::RETURN_TO_CENTRE), str2);
+	}
+}
+
 namespace UnrandomizeUnknownCodepoints
 {
 	int Random_RandSequence_Fixed(uint32_t)
@@ -2641,6 +2770,45 @@ static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFront
 		InjectHook(lang1, sprintf_lang1);
 	}
 	TXN_CATCH();
+
+
+	// More translatable strings
+	// Can be applied unconditionally because it uses safe fallbacks
+	if (HasLanguageHook)
+	{
+		using namespace MoreTranslatableStrings;
+
+		// Patch each case separately since different localized executables may or may not have those already
+		try
+		{
+			// NA in Telemetry
+			auto na_string = get_pattern("E8 ? ? ? ? 83 C4 10 EB 31");
+			InjectHook(na_string, sprintf_na);
+		}
+		TXN_CATCH();
+
+		try
+		{
+			// Localized key names
+			auto get_keyboard_key_name = get_pattern("57 8B 7C 24 0C 6A 00 6A 00", -5);
+			auto get_letter_name = ReadCallFrom(get_pattern("C6 06 00 E8 ? ? ? ? 84 C0", 3));
+
+			Keyboard_ConvertScanCodeToChar = static_cast<decltype(Keyboard_ConvertScanCodeToChar)>(get_letter_name);
+			InjectHook(get_keyboard_key_name, Keyboard_ConvertScanCodeToString, PATCH_JUMP);
+		}
+		TXN_CATCH();
+
+		try
+		{
+			// "Return to Centre", previously hardcoded everywhere
+			auto centre1 = get_pattern("E8 ? ? ? ? 83 C4 0C 68 ? ? ? ? 55");
+			auto centre2 = get_pattern("E8 ? ? ? ? 55 68 ? ? ? ? 68 ? ? ? ? E8 ? ? ? ? 83 C4 1C");
+
+			InjectHook(centre1, sprintf_returntocentre1);
+			InjectHook(centre2, sprintf_returntocentre2);
+		}
+		TXN_CATCH();
+	}
 
 
 	// Restored cube layouts
