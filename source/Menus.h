@@ -7,6 +7,7 @@ namespace MenuID
 {
 	static constexpr size_t GRAPHICS = 19; // Original - 19
 	static constexpr size_t GRAPHICS_ADVANCED = 20; // Original - 20
+	static constexpr size_t LANGUAGE = 29; // Original - 29
 }
 
 namespace EntryID
@@ -159,7 +160,8 @@ void PC_GraphicsOptions_Exit_NewOptions(MenuDefinition* menu, int a2);
 
 inline int* gnCurrentAdapter;
 
-extern MenuDefinition* gmoFrontEndMenus;
+inline MenuDefinition* gmoFrontEndMenus;
+//inline MenuDefinition** gpCurrentMenu;
 
 namespace Menus::Patches
 {

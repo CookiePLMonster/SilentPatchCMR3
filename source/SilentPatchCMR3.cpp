@@ -139,7 +139,7 @@ namespace Localization
 				"\\Data\\Boot\\Czech"
 			};
 
-			int langID = GameInfo_GetTextLanguage();
+			uint32_t langID = GameInfo_GetTextLanguage();
 
 			// If Locale Pack is installed, don't do any special casing
 			// Else, always pick Polish for PL, or pick Czech when CZ exe is used and Spanish is selected
@@ -613,6 +613,59 @@ namespace ConsistentControlsScreen
 
 		*outText = stringBuffer;
 		return result;
+	}
+}
+
+namespace ConsistentLanguagesScreen
+{
+	// Also supporting multi7 now
+	static const char* GetCoDriverName()
+	{
+		const std::array<uint32_t, 8> coDriverNames = {
+			445, 447, 449, 448, 450, Language::CODRIVER_POLISH_A, Language::CODRIVER_POLISH_B, Language::CODRIVER_CZECH
+		};
+	
+		// TODO: Exclude Nicky Grist if needed
+		uint32_t langID = gmoFrontEndMenus[MenuID::LANGUAGE].m_entries[1].m_value;
+		if (langID >= coDriverNames.size())
+		{
+			return Language_GetString(coDriverNames.front());
+		}
+		return Language_GetString(coDriverNames[langID]);
+	}
+
+	static const char* GetLangName()
+	{
+		const std::array<uint32_t, 7> langNames = {
+			1, 2, 4, 3, 5, Language::LANGUAGE_POLISH, Language::LANGUAGE_CZECH
+		};
+
+		uint32_t langID = gmoFrontEndMenus[MenuID::LANGUAGE].m_entries[0].m_value;
+		if (langID >= langNames.size())
+		{
+			return Language_GetString(langNames.front());
+		}
+		return Language_GetString(langNames[langID]);
+	}
+
+	int __cdecl sprintf_codriver2(char* Buffer, const char* Format, const char* str1, const char* /*str2*/)
+	{
+		return sprintf_s(Buffer, 512, Format, str1, GetCoDriverName());
+	}
+
+	int __cdecl sprintf_codriver1(char* Buffer, const char* Format, const char* /*str*/)
+	{
+		return sprintf_s(Buffer, 256, Format, GetCoDriverName());
+	}
+
+	int __cdecl sprintf_lang2(char* Buffer, const char* Format, const char* str1, const char* /*str2*/)
+	{
+		return sprintf_s(Buffer, 512, Format, str1, GetLangName());
+	}
+
+	int __cdecl sprintf_lang1(char* Buffer, const char* Format, const char* /*str*/)
+	{
+		return sprintf_s(Buffer, 256, Format, GetLangName());
 	}
 }
 
@@ -2323,7 +2376,7 @@ namespace Graphics::Patches
 	}
 }
 
-static void ApplyMergedLocalizations(const bool HasRegistry)
+static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFrontEnd, const bool HasGameInfo, const bool HasLanguageHook)
 {
 	const bool WantsTexts = Version::HasMultipleLocales();
 	const bool WantsCoDrivers = Version::HasMultipleCoDrivers();
@@ -2337,24 +2390,6 @@ static void ApplyMergedLocalizations(const bool HasRegistry)
 		ReadCall(addr, func);
 		InjectHook(addr, hook);
 	};
-
-	bool HasGameInfo = false;
-	try
-	{
-		// Different pattern for EFIGS/Czech and Polish
-		try
-		{
-			GameInfo_GetTextLanguage = static_cast<decltype(GameInfo_GetTextLanguage)>(get_pattern("E8 ? ? ? ? 88 44 24 00", -0xB));
-		}
-		catch (const hook::txn_exception&)
-		{
-			GameInfo_GetTextLanguage = static_cast<decltype(GameInfo_GetTextLanguage)>(get_pattern("6A 45 E8 ? ? ? ? C3"));
-		}
-		GameInfo_GetCoDriverLanguage = static_cast<decltype(GameInfo_GetCoDriverLanguage)>(ReadCallFrom(get_pattern("E8 ? ? ? ? 85 C0 75 45 8D 44 24 08")));
-
-		HasGameInfo = true;
-	}
-	TXN_CATCH();
 
 	// Restored languages in Polish
 	// TODO: Tidy up
@@ -2572,6 +2607,38 @@ static void ApplyMergedLocalizations(const bool HasRegistry)
 			Nop(set_defaults.get<void>(5 + 2), 6);
 		}
 		TXN_CATCH();
+	}
+	TXN_CATCH();
+
+
+	// Multi7 languages in the Language screen
+	// This is applied unconditionally, even if additional languages are not installed, as it also acts as a bugfix
+	// for misplaced menu arrows
+	if (HasGameInfo && HasLanguageHook && HasFrontEnd) try
+	{
+		using namespace ConsistentLanguagesScreen;
+
+		auto codriver2_1 = pattern("E8 ? ? ? ? 83 C4 10 68 ? ? ? ? EB").count(2);
+		void* codriver2[] = {
+			codriver2_1.get(0).get<void>(),
+			codriver2_1.get(1).get<void>(),
+			get_pattern("E8 ? ? ? ? 8B 4E 4C 83 C4 10 81 C1"),
+			get_pattern("E8 ? ? ? ? 83 C4 10 68 ? ? ? ? E9"),
+		};
+
+		auto codriver1 = get_pattern("E8 ? ? ? ? 83 C4 0C 68 ? ? ? ? 6A 00 E8 ? ? ? ? 03 C7 55 8B 54 24 20");
+
+		auto lang2 = get_pattern("E8 ? ? ? ? 8B 46 24 83 C4 10");
+		auto lang1 = get_pattern("E8 ? ? ? ? 83 C4 0C 68 ? ? ? ? 6A 00 E8 ? ? ? ? 03 C7 55 8B 4C 24 20");
+
+		InjectHook(codriver1, sprintf_codriver1);
+		for (void* addr : codriver2)
+		{
+			InjectHook(addr, sprintf_codriver2);
+		}
+
+		InjectHook(lang2, sprintf_lang2);
+		InjectHook(lang1, sprintf_lang1);
 	}
 	TXN_CATCH();
 
@@ -2857,7 +2924,21 @@ static void ApplyPatches(const bool HasRegistry)
 	try
 	{
 		auto get_num_players = ReadCallFrom(get_pattern("E8 ? ? ? ? 88 44 24 23"));
+		auto get_codriver_language = ReadCallFrom(get_pattern("E8 ? ? ? ? 85 C0 75 45 8D 44 24 08"));
+
+		// Different pattern for EFIGS/Czech and Polish
+		void* get_text_language;
+		try
+		{
+			get_text_language = get_pattern("E8 ? ? ? ? 88 44 24 00", -0xB);
+		}
+		catch (const hook::txn_exception&)
+		{
+			get_text_language = get_pattern("6A 45 E8 ? ? ? ? C3");
+		}
 		GameInfo_GetNumberOfPlayersInThisRace = reinterpret_cast<decltype(GameInfo_GetNumberOfPlayersInThisRace)>(get_num_players);
+		GameInfo_GetTextLanguage = static_cast<decltype(GameInfo_GetTextLanguage)>(get_text_language);
+		GameInfo_GetCoDriverLanguage = static_cast<decltype(GameInfo_GetCoDriverLanguage)>(get_codriver_language);
 
 		HasGameInfo = true;
 	}
@@ -2871,6 +2952,19 @@ static void ApplyPatches(const bool HasRegistry)
 		gpPositionInfoMulti = position_into_multi;
 
 		HasUIPositions = true;
+	}
+	TXN_CATCH();
+
+	bool HasFrontEnd = false;
+	try
+	{
+		auto menus = *get_pattern<MenuDefinition*>("C7 05 ? ? ? ? ? ? ? ? 89 3D ? ? ? ? 89 35", 2+4);
+		//auto current_menu = *get_pattern<MenuDefinition**>("89 44 24 ? A1 ? ? ? ? 3D", 4+1);
+
+		gmoFrontEndMenus = menus;
+		//gpCurrentMenu = current_menu;
+
+		HasFrontEnd = true;
 	}
 	TXN_CATCH();
 
@@ -2927,11 +3021,10 @@ static void ApplyPatches(const bool HasRegistry)
 
 	// Menu changes
 	bool HasMenuHook = false;
-	try
+	if (HasFrontEnd) try
 	{
 		using namespace Menus::Patches;
 
-		auto menus = *get_pattern<MenuDefinition*>("C7 05 ? ? ? ? ? ? ? ? 89 3D ? ? ? ? 89 35", 2+4);
 		std::array<void*, 3> update_menu_entries = {
 			[] {
 				try
@@ -2962,7 +3055,6 @@ static void ApplyPatches(const bool HasRegistry)
 			}
 		}());
 
-		gmoFrontEndMenus = menus;
 		HookEach(update_menu_entries, InterceptCall);
 		HasMenuHook = true;
 
@@ -4450,7 +4542,7 @@ static void ApplyPatches(const bool HasRegistry)
 
 	
 	// Install the locale pack (if applicable)
-	ApplyMergedLocalizations(HasRegistry);
+	ApplyMergedLocalizations(HasRegistry, HasFrontEnd, HasGameInfo, HasLanguageHook);
 }
 
 void OnInitializeHook()

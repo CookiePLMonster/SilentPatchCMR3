@@ -45,6 +45,13 @@ static std::map<uint32_t, const char*> GetNewStrings()
 		{ 1028, "PGDN" }, { 1029, "RIGHT" }, { 1030, "LEFT" }, { 1031, "UP" },
 		{ 1032, "DOWN" }, { 1033, "[?]" },
 
+		{ LANGUAGE_POLISH, "POLSKI" },
+		{ LANGUAGE_CZECH, "\xC3" "ESKY" },
+
+		{ CODRIVER_POLISH_A, "POLISH (J. KULIG)" },
+		{ CODRIVER_POLISH_B, "POLISH (J. WITUCH)" },
+		{ CODRIVER_CZECH, "CZECH" },
+
 		{ DISPLAY_MODE, "DISPLAY MODE" },
 		{ FULLSCREEN, "FULLSCREEN" },
 		{ WINDOWED, "WINDOWED" },

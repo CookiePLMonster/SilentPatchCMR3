@@ -8,8 +8,6 @@
 
 #include <cstring>
 
-MenuDefinition* gmoFrontEndMenus;
-
 static int32_t GetResolutionEntryFormatID(const MenuResolutionEntry* entry)
 {
 	switch (entry->m_format)
