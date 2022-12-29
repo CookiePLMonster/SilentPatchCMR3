@@ -1,5 +1,7 @@
 #include "Globals.h"
 
+#include "Version.h"
+
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <Windows.h>
@@ -53,6 +55,26 @@ static const char cScanPolishCodeIndex[424] = {
 };  
 
 
+
+uint32_t GameInfo_GetTextLanguage_LocalePackCheck()
+{
+	uint32_t langID = GameInfo_GetTextLanguage();
+
+	// If Locale Pack is installed, don't do any special casing
+	// Else, always pick Polish for PL, or pick Czech when CZ exe is used and Spanish is selected
+	if (!Version::HasMultipleLocales())
+	{
+		if (Version::IsPolish())
+		{
+			langID = TEXT_LANG_POLISH;
+		}
+		else if (Version::IsCzech() && langID == TEXT_LANG_SPANISH)
+		{
+			langID = TEXT_LANG_CZECH;
+		}
+	}
+	return langID;
+}
 
 char Keyboard_ConvertScanCodeToCharLocalised(int scanCode, int shift, int capsLock)
 {

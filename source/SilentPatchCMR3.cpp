@@ -139,22 +139,7 @@ namespace Localization
 				"\\Data\\Boot\\Czech"
 			};
 
-			uint32_t langID = GameInfo_GetTextLanguage();
-
-			// If Locale Pack is installed, don't do any special casing
-			// Else, always pick Polish for PL, or pick Czech when CZ exe is used and Spanish is selected
-			if (!Version::HasMultipleLocales())
-			{
-				if (Version::IsPolish())
-				{
-					langID = TEXT_LANG_POLISH;
-				}
-				else if (Version::IsCzech() && langID == TEXT_LANG_SPANISH)
-				{
-					langID = TEXT_LANG_CZECH;
-				}
-			}
-
+			const uint32_t langID = GameInfo_GetTextLanguage_LocalePackCheck();
 			if (langID > 0 && langID < 7)
 			{
 				orgFile_SetCurrentDirectory(dirs[langID]);

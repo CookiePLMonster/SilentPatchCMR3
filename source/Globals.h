@@ -18,6 +18,8 @@ inline uint8_t* gKeyboardData;
 inline uint32_t (*GameInfo_GetTextLanguage)();
 inline uint32_t (*GameInfo_GetCoDriverLanguage)();
 
+uint32_t GameInfo_GetTextLanguage_LocalePackCheck();
+
 char Keyboard_ConvertScanCodeToCharLocalised(int scanCode, int shift, int capsLock);
 
 std::filesystem::path GetPathToGameDir();

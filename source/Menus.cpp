@@ -29,28 +29,34 @@ static int32_t GetResolutionEntryFormatID(const MenuResolutionEntry* entry)
 
 static void PatchOSDKeyboard(MenuDefinition* menu)
 {
-	if (Menus::Patches::MultipleTextsPatched)
-	{
-		// Pick a keyboard depending on the selected language
-		if (GameInfo_GetTextLanguage() == TEXT_LANG_POLISH)
-		{
-			menu->m_entries[0].m_entryDataString = "1234567890";
-			menu->m_entries[1].m_entryDataString = "A" "\xA5" "BC" "\xC6" "DE" "\xCA" "FGHIJ";
-			menu->m_entries[2].m_entryDataString = "KL" "\xA3" "MN" "\xD1" "O" "\xD3" "PQRS" "\x8C" "T";
-			menu->m_entries[3].m_entryDataString = "UVWXYZ" "\x8F\xAF" ".,<#";
-		}
-		else
-		{
-			menu->m_entries[0].m_entryDataString = "1234567890";
-			menu->m_entries[1].m_entryDataString = "ABCDEFGHIJ";
-			menu->m_entries[2].m_entryDataString = "KLMNOPQRST";
-			menu->m_entries[3].m_entryDataString = "UVWXYZ.,<#";
-		}
+	const uint32_t langID = GameInfo_GetTextLanguage_LocalePackCheck();
 
-		for (size_t i = 0; i < 4; i++)
-		{
-			menu->m_entries[i].m_entryDataInt = std::strlen(menu->m_entries[i].m_entryDataString);
-		}
+	// Pick a keyboard depending on the selected language
+	if (langID == TEXT_LANG_POLISH)
+	{
+		menu->m_entries[0].m_entryDataString = "1234567890";
+		menu->m_entries[1].m_entryDataString = "A" "\xA5" "BC" "\xC6" "DE" "\xCA" "FGHIJ";
+		menu->m_entries[2].m_entryDataString = "KL" "\xA3" "MN" "\xD1" "O" "\xD3" "PQRS" "\x8C" "T";
+		menu->m_entries[3].m_entryDataString = "UVWXYZ" "\x8F\xAF" ".,<#";
+	}
+	else if (langID == TEXT_LANG_CZECH) // New to SP
+	{
+		menu->m_entries[0].m_entryDataString = "1234567890A" "\xC1" "B";
+		menu->m_entries[1].m_entryDataString = "C" "\xC3" "D" "\xC5" "E" "\xC9\xCA" "FGHI" "\xCD" "JK";
+		menu->m_entries[2].m_entryDataString = "LMN" "\xD1" "O" "\xD3" "PQR" "\xC4" "S" "\xD2" "T" "\xD4";
+		menu->m_entries[3].m_entryDataString = "U" "\xDA\xDB" "VWXY" "\xDD" "Z" "\xC2" ".,<#";
+	}
+	else
+	{
+		menu->m_entries[0].m_entryDataString = "1234567890";
+		menu->m_entries[1].m_entryDataString = "ABCDEFGHIJ";
+		menu->m_entries[2].m_entryDataString = "KLMNOPQRST";
+		menu->m_entries[3].m_entryDataString = "UVWXYZ.,<#";
+	}
+
+	for (size_t i = 0; i < 4; i++)
+	{
+		menu->m_entries[i].m_entryDataInt = std::strlen(menu->m_entries[i].m_entryDataString);
 	}
 }
 
