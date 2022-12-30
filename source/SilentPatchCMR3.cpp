@@ -28,6 +28,7 @@
 #include <filesystem>
 #include <map>
 #include <mutex>
+#include <numeric>
 #include <string>
 #include <utility>
 #include <vector>
@@ -870,6 +871,30 @@ namespace SPText
 		if (Version::IsKnownVersion() && !Version::IsSupportedVersion())
 		{
 			text.append(" (unsupported)");
+		}
+
+		std::vector<std::string> optionalComponents;
+		if (Version::HasMultipleBootScreens() && Version::HasMultipleLocales() && Version::HasMultipleCoDrivers())
+		{
+			optionalComponents.emplace_back("Language Pack");
+		}
+		// Only mention Nicky Grist in the Polish version
+		if (Version::IsPolish() && Version::HasNickyGristFiles())
+		{
+			optionalComponents.emplace_back("Nicky Grist Pack");
+		}
+		if (Version::HasHDUI())
+		{
+			optionalComponents.emplace_back("HD UI");
+		}
+
+		if (!optionalComponents.empty())
+		{
+			text.append("\nOptional components: ");
+			text.append(std::accumulate(std::next(optionalComponents.begin()), optionalComponents.end(), optionalComponents.front(),
+				[](const std::string& a, const std::string& b) {
+					return a + ", " + b;
+				}));
 		}
 
 		std::string result;

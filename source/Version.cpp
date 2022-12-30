@@ -21,7 +21,8 @@
 
 static bool NickyGristFilesPresent = false;
 static bool JanuszWituchVoiceUsed = false;
-bool HasMulti7BootScreens = false, HasMulti7Locales = false, HasMulti7CoDrivers = false;
+static bool HasMulti7BootScreens = false, HasMulti7Locales = false, HasMulti7CoDrivers = false;
+static bool HasHighDefUI = false;
 static void DetectGameFilesStuff()
 {
 	const std::filesystem::path pathToGame = GetPathToGameDir();
@@ -144,6 +145,16 @@ static void DetectGameFilesStuff()
 			}
 		}
 		HasMulti7CoDrivers = coDriversPresent;
+	}
+
+	// Assume HD UI is in use if Misc.big is, well, big
+	{
+		std::uintmax_t fileSize = std::filesystem::file_size(pathToGame / L"Data/Textures/Misc.big", ec);
+		if (ec) // Error
+		{
+			fileSize = 0;
+		}
+		HasHighDefUI = fileSize > 400000;
 	}
 }
 
@@ -301,6 +312,11 @@ bool HasMultipleLocales()
 bool HasMultipleCoDrivers()
 {
 	return HasMulti7CoDrivers;
+}
+
+bool HasHDUI()
+{
+	return HasHighDefUI;
 }
 
 bool IsKnownVersion()

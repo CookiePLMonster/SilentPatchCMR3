@@ -32,4 +32,7 @@ namespace Version
 	bool HasMultipleBootScreens();
 	bool HasMultipleLocales();
 	bool HasMultipleCoDrivers();
+
+	// Guesstimate only, don't use to make any meaningful decisions! This is only for the UI
+	bool HasHDUI();
 }
