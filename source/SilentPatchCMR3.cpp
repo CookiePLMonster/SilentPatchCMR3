@@ -2715,8 +2715,6 @@ static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFront
 		}
 
 		auto get_language_code = get_pattern("8B 44 24 04 8B 0C 85 ? ? ? ? 8A 01");
-		auto fonts_load = get_pattern("E8 ? ? ? ? 83 C4 0C 8D 4C 24 0C");
-
 		auto set_language_current = get_pattern("8B 46 24 50 E8 ? ? ? ? 6A 0C E8", 4);
 
 		auto credits_files = get_pattern("8B 0C B5 ? ? ? ? 8D 44 24 0C", 3);
@@ -2803,7 +2801,6 @@ static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFront
 
 		InjectHook(get_language_code, GetLanguageCode, PATCH_JUMP);
 		InjectHook(get_language_id_by_code, GetLanguageIDByCode, PATCH_JUMP);
-		InjectHook(fonts_load, sprintf_RegionalFont);
 
 		credits_groups.for_each_result([](pattern_match match)
 		{
@@ -2952,6 +2949,16 @@ static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFront
 
 		auto set_current_directory_boot_screen = get_pattern("E8 ? ? ? ? 53 68 ? ? ? ? 68 ? ? ? ? 68");
 		InterceptCall(set_current_directory_boot_screen, orgFile_SetCurrentDirectory, File_SetCurrentDirectory_BootScreen);
+	}
+	TXN_CATCH();
+
+
+	// Multi7 fonts
+	// Applied unconditionally due to the HD UI that must be able to load from fonts_P/fonts_C even without the locale pack
+	try
+	{
+		auto fonts_load = get_pattern("E8 ? ? ? ? 83 C4 0C 8D 4C 24 0C");
+		InjectHook(fonts_load, Localization::sprintf_RegionalFont);
 	}
 	TXN_CATCH();
 
