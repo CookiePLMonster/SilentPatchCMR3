@@ -48,6 +48,11 @@ HMODULE GetModuleHandleFromAddress(AT address)
 	return result;
 }
 
+namespace Cubes
+{
+	void SetUpCubeLayouts();
+}
+
 namespace Localization
 {
 	static constexpr uint32_t NUM_LOCALES = 7; // After merging
@@ -311,6 +316,7 @@ namespace Localization
 					FrontEndFonts_Destroy();
 					FrontEndFonts_Load();
 				}
+				Cubes::SetUpCubeLayouts();
 				lastLangID = langID;
 			}
 		}
@@ -319,29 +325,48 @@ namespace Localization
 
 namespace Cubes
 {
-	void** gBlankCubeTexture;
-	void** gGearCubeTextures;
-	void** gStageCubeTextures;
+	D3DTexture** gBlankCubeTexture;
+	D3DTexture** gGearCubeTextures;
+	D3DTexture** gStageCubeTextures;
 
-	void** gGearCubeLayouts;
-	void** gStageCubeLayouts;
+	D3DTexture** gGearCubeLayouts;
+	D3DTexture** gStageCubeLayouts;
 
 	void SetUpCubeLayouts()
 	{
-		void* BLANK = *gBlankCubeTexture;
+		const bool polishLayouts = GameInfo_GetTextLanguage() == TEXT_LANG_POLISH;
+		D3DTexture* BLANK = *gBlankCubeTexture;
 
 		// Gear cubes
 		{
 			const auto& automatic = gGearCubeLayouts;
 			const auto& manual = automatic+3;
 
-			automatic[0] = gGearCubeTextures[0]; // A
-			automatic[1] = gGearCubeTextures[2]; // T
-			automatic[2] = BLANK;
+			D3DTexture* A = gGearCubeTextures[0];
+			D3DTexture* M = gGearCubeTextures[1];
+			D3DTexture* T = gGearCubeTextures[2];
+			D3DTexture* R = gGearCubeTextures[4];
 
-			manual[0] = BLANK;
-			manual[1] = gGearCubeTextures[1]; // M
-			manual[2] = gGearCubeTextures[2]; // T
+			if (polishLayouts && R != nullptr)
+			{
+				automatic[0] = A;
+				automatic[1] = BLANK;
+				automatic[2] = BLANK;
+
+				manual[0] = BLANK;
+				manual[1] = BLANK;
+				manual[2] = R;
+			}
+			else
+			{
+				automatic[0] = A;
+				automatic[1] = T;
+				automatic[2] = BLANK;
+
+				manual[0] = BLANK;
+				manual[1] = M;
+				manual[2] = T;
+			}
 		}
 
 		// Stage cubes
@@ -354,12 +379,37 @@ namespace Cubes
 			const auto& stage6 = stage5+3;
 			const auto& specialStage = stage6+3;
 
-			void* S = gStageCubeTextures[6];
+			D3DTexture* one = gStageCubeTextures[0];
+			D3DTexture* two = gStageCubeTextures[1];
+			D3DTexture* three = gStageCubeTextures[2];
+			D3DTexture* four = gStageCubeTextures[3];
+			D3DTexture* five = gStageCubeTextures[4];
+			D3DTexture* six = gStageCubeTextures[5];
+			D3DTexture* S = gStageCubeTextures[6];
+			D3DTexture* O = gStageCubeTextures[7];
+			D3DTexture* P = gStageCubeTextures[8];
 
-			// Keep stage numbers as-is
-			stage1[0] = stage2[0] = stage3[0] = stage4[0] = stage5[0] = stage6[0] = S;
-			stage1[1] = stage2[1] = stage3[1] = stage4[1] = stage5[1] = stage6[1] = S;
-			specialStage[0] = specialStage[1] = specialStage[2] = S;
+			if (polishLayouts && (P != nullptr && O != nullptr))
+			{
+				stage1[0] = stage2[0] = stage3[0] = stage4[0] = stage5[0] = stage6[0] = O;
+				stage1[1] = stage2[1] = stage3[1] = stage4[1] = stage5[1] = stage6[1] = S;
+
+				specialStage[0] = P;
+				specialStage[1] = O;
+				specialStage[2] = S;
+			}
+			else
+			{
+				stage1[0] = stage2[0] = stage3[0] = stage4[0] = stage5[0] = stage6[0] = S;
+				stage1[1] = stage2[1] = stage3[1] = stage4[1] = stage5[1] = stage6[1] = S;
+				specialStage[0] = specialStage[1] = specialStage[2] = S;
+			}
+			stage1[2] = one;
+			stage2[2] = two;
+			stage3[2] = three;
+			stage4[2] = four;
+			stage5[2] = five;
+			stage6[2] = six;
 		}
 	}
 
@@ -384,6 +434,33 @@ namespace Cubes
 	{
 		auto tuple = std::tuple_cat(std::forward<Vars>(vars));
 		HookEachImpl<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
+	}
+
+	static const char* gStageCubeNames[9] = {
+		"stage1", "stage2", "stage3", "stage4", "stage5", "stage6", "stageS",
+		"stageO", "stageP"
+	};
+	static const char* gGearCubeNames[7] = {
+		"gearA", "gearM", "gearT",
+		"gearU", "gearR", "gearEo", "gearC"
+	};
+
+	static D3DTexture* gStageCubeTexturesSpace[9];
+	static D3DTexture* gGearCubeTexturesSpace[7];
+
+	static void (*Cubes_Destroy)();
+	static void Cubes_Destroy_Custom()
+	{
+		for (auto& tex : gStageCubeTexturesSpace)
+		{
+			Texture_DestroyManaged(&tex);
+		}
+		for (auto& tex : gGearCubeTexturesSpace)
+		{
+			Texture_DestroyManaged(&tex);
+		}
+
+		Cubes_Destroy();
 	}
 }
 
@@ -2605,7 +2682,7 @@ namespace Graphics::Patches
 	}
 }
 
-static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFrontEnd, const bool HasGameInfo, const bool HasLanguageHook, const bool HasKeyboard)
+static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFrontEnd, const bool HasGameInfo, const bool HasLanguageHook, const bool HasKeyboard, const bool HasTexture)
 {
 	const bool WantsTexts = Version::HasMultipleLocales();
 	const bool WantsCoDrivers = Version::HasMultipleCoDrivers();
@@ -2845,6 +2922,56 @@ static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFront
 			});
 		}
 		TXN_CATCH();
+
+		// Restored cube layouts
+		if (HasGameInfo && HasTexture) try
+		{
+			using namespace Cubes;
+
+			std::array<void*, 2> load_cube_textures = {
+				get_pattern("E8 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? 8B 44 24 08 6A 0E"),
+				get_pattern("E8 ? ? ? ? A1 ? ? ? ? 85 C0 75 14"),
+			};
+
+			gBlankCubeTexture = *get_pattern<D3DTexture**>("56 68 ? ? ? ? E8 ? ? ? ? 68 ? ? ? ? E8 ? ? ? ? 68", 1 + 5 + 5 + 1);
+
+			gGearCubeLayouts = *get_pattern<D3DTexture**>("8B 04 95 ? ? ? ? 50 6A 00 E8 ? ? ? ? 83 E0 03 83 C0 02 50 6A 00", 3);
+			gStageCubeLayouts = *get_pattern<D3DTexture**>("8B 14 8D ? ? ? ? 52 6A 00 E8 ? ? ? ? 83 E0 03 83 C0 02 50 6A 02 E8 ? ? ? ? 0F BF 46 18 A3 ? ? ? ? A1", 3) - 2;
+
+			// Those need different treatment in Polish and EFIGS/Czech, so locate them last
+			try
+			{
+				// Polish - no need to patch loading
+				gGearCubeTextures = *get_pattern<D3DTexture**>("BE ? ? ? ? BF 07 00 00 00 56", 1);
+				gStageCubeTextures = *get_pattern<D3DTexture**>("BE ? ? ? ? BF 09 00 00 00 56", 1);
+			}
+			catch (const hook::txn_exception&)
+			{
+				// EFIGS/Czech - patch loading, and point those at our own allocations
+				auto gear_cubes_load = pattern("83 FE 0C 7C C1").get_one();
+				auto stage_cubes_load = pattern("83 FE 1C 7C C1").get_one();
+				auto cubes_destructor = get_pattern("A1 ? ? ? ? 68 ? ? ? ? 89 0D", 5 + 1);
+
+				Patch(gear_cubes_load.get<void>(-0x3A + 2), &gGearCubeNames);
+				Patch(gear_cubes_load.get<void>(-0x24 + 2), &gGearCubeNames);
+				Patch(gear_cubes_load.get<void>(-0x16 + 2), &gGearCubeTexturesSpace);
+				Patch<int8_t>(gear_cubes_load.get<void>(2), 7 * 4);
+
+				Patch(stage_cubes_load.get<void>(-0x3A + 2), &gStageCubeNames);
+				Patch(stage_cubes_load.get<void>(-0x24 + 2), &gStageCubeNames);
+				Patch(stage_cubes_load.get<void>(-0x16 + 2), &gStageCubeTexturesSpace);
+				Patch<int8_t>(stage_cubes_load.get<void>(2), 9 * 4);
+
+				Cubes_Destroy = *static_cast<decltype(Cubes_Destroy)*>(cubes_destructor);
+				Patch(cubes_destructor, Cubes_Destroy_Custom);
+
+				gGearCubeTextures = gGearCubeTexturesSpace;
+				gStageCubeTextures = gStageCubeTexturesSpace;
+			}
+
+			HookEach(load_cube_textures, InterceptCall);
+		}
+		TXN_CATCH();
 	}
 	TXN_CATCH();
 
@@ -2918,28 +3045,6 @@ static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFront
 		}
 		TXN_CATCH();
 	}
-
-
-	// Restored cube layouts
-	try
-	{
-		using namespace Cubes;
-
-		std::array<void*, 2> load_cube_textures = {
-			get_pattern("E8 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? 8B 44 24 08 6A 0E"),
-			get_pattern("E8 ? ? ? ? A1 ? ? ? ? 85 C0 75 14"),
-		};
-
-		gBlankCubeTexture = *get_pattern<void**>("56 68 ? ? ? ? E8 ? ? ? ? 68 ? ? ? ? E8 ? ? ? ? 68", 1 + 5 + 5 + 1);
-		gGearCubeTextures = *get_pattern<void**>("BE ? ? ? ? BF 07 00 00 00 56", 1);
-		gStageCubeTextures = *get_pattern<void**>("BE ? ? ? ? BF 09 00 00 00 56", 1);
-
-		gGearCubeLayouts = *get_pattern<void**>("8B 04 95 ? ? ? ? 50 6A 00 E8 ? ? ? ? 83 E0 03 83 C0 02 50 6A 00", 3);
-		gStageCubeLayouts = *get_pattern<void**>("8B 15 ? ? ? ? A3 ? ? ? ? 89 15", 6 + 1);
-
-		HookEach(load_cube_textures, InterceptCall);
-	}
-	TXN_CATCH();
 
 
 	// Multi7 boot screen (if present)
@@ -3271,6 +3376,16 @@ static void ApplyPatches(const bool HasRegistry)
 		//gpCurrentMenu = current_menu;
 
 		HasFrontEnd = true;
+	}
+	TXN_CATCH();
+
+	bool HasTexture = false;
+	try
+	{
+		auto texture_destroy = get_pattern("33 F6 3B 3C B5", -6);
+		Core_Texture_Destroy = static_cast<decltype(Core_Texture_Destroy)>(texture_destroy);
+	
+		HasTexture = true;
 	}
 	TXN_CATCH();
 
@@ -4905,7 +5020,7 @@ static void ApplyPatches(const bool HasRegistry)
 
 	
 	// Install the locale pack (if applicable)
-	ApplyMergedLocalizations(HasRegistry, HasFrontEnd, HasGameInfo, HasLanguageHook, HasKeyboard);
+	ApplyMergedLocalizations(HasRegistry, HasFrontEnd, HasGameInfo, HasLanguageHook, HasKeyboard, HasTexture);
 }
 
 void OnInitializeHook()

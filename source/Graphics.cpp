@@ -56,6 +56,15 @@ void Core_Texture_SetFilteringMethod(D3DTexture* texture, uint32_t min, uint32_t
 	}
 }
 
+void Texture_DestroyManaged(D3DTexture** texture)
+{
+	if (*texture != nullptr)
+	{
+		Core_Texture_Destroy(*texture);
+		*texture = nullptr;
+	}
+}
+
 OSD_Element* OSD_Element_Init_Center(OSD_Element* element, int posX, int posY, int width, int height, int a6, int a7, int a8, int a9, int a10, int a11)
 {
 	const float scaledWidth = GetScaledResolutionWidth();

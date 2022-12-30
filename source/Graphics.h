@@ -279,6 +279,9 @@ struct BlitRect2D_GT
 static_assert(sizeof(BlitRect2D_GT) == 52, "Wrong size: BlitRect2D_GT");
 
 void Core_Texture_SetFilteringMethod(D3DTexture* texture, uint32_t min, uint32_t mag, uint32_t mip);
+inline void (*Core_Texture_Destroy)(D3DTexture* texture);
+
+void Texture_DestroyManaged(D3DTexture** texture);
 
 OSD_Element* OSD_Element_Init_Center(OSD_Element* element, int posX, int posY, int width, int height, int a6, int a7, int a8, int a9, int a10, int a11);
 OSD_Element* OSD_Element_Init_RightAlign(OSD_Element* element, int posX, int posY, int width, int height, int a6, int a7, int a8, int a9, int a10, int a11);
