@@ -96,6 +96,13 @@ void Registry::Patches::SetRegistryDword_Patch(const char* /*subkey*/, const cha
 
 void Registry::Patches::SetRegistryChar_Patch(const char* /*subkey*/, const char* key, char value)
 {
+	// Drop writes of unprintable characters as a bugfix for the game not getting a language code
+	// for a write (original bug)
+	if (value <= ' ')
+	{
+		return;
+	}
+
 	SetRegistryChar(REGISTRY_SECTION_NAME, AnsiToWchar(key).c_str(), value);
 }
 
