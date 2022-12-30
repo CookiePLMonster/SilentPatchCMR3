@@ -1077,6 +1077,56 @@ namespace ResolutionsList
 	}
 }
 
+namespace FindClosestDisplayMode
+{
+	static int (*orgCreateD3DDevice)();
+	static int FindClosestDisplayMode_CreateD3DDevice()
+	{
+		// If running fullscreen, we must be matching a specific display mode or else device fails to create
+		if (gd3dPP->Windowed == FALSE)
+		{
+			IDirect3D9* d3d = *gpD3D;
+
+			const D3DFORMAT format = gd3dPP->BackBufferFormat == D3DFMT_A8R8G8B8 ? D3DFMT_X8R8G8B8 : gd3dPP->BackBufferFormat;
+
+			// For the lack of a better idea, find a display mode with the closest screen area - or an exact match if one exists
+			std::map<uint64_t, std::pair<UINT, UINT>> displayModesByArea;
+			const UINT NumModes = d3d->GetAdapterModeCount(gGraphicsConfig->m_adapter, format);			
+			for (UINT i = 0; i < NumModes; i++)
+			{
+				D3DDISPLAYMODE displayMode;
+				if (SUCCEEDED(d3d->EnumAdapterModes(gGraphicsConfig->m_adapter, format, i, &displayMode)))
+				{
+					// If it's an exact match, we don't need to do anything - bail out
+					if (gd3dPP->BackBufferWidth == displayMode.Width && gd3dPP->BackBufferHeight == displayMode.Height)
+					{
+						return orgCreateD3DDevice();
+					}
+
+					// Use operator[] so we overwrite an already existing entry
+					displayModesByArea[static_cast<uint64_t>(displayMode.Width) * displayMode.Height] = {displayMode.Width, displayMode.Height};
+				}
+			}
+
+			// No exact match was found, so find the closest display mode
+			auto it = displayModesByArea.lower_bound(static_cast<uint64_t>(gd3dPP->BackBufferWidth) * gd3dPP->BackBufferHeight);
+			if (it != displayModesByArea.end())
+			{
+				gd3dPP->BackBufferWidth = it->second.first;
+				gd3dPP->BackBufferHeight = it->second.second;
+			}
+			else
+			{
+				// No resolutions as big as this one, use the last one from the list
+				auto topIt = displayModesByArea.rbegin();
+				gd3dPP->BackBufferWidth = topIt->second.first;
+				gd3dPP->BackBufferHeight = topIt->second.second;
+			}
+		}
+		return orgCreateD3DDevice();
+	}
+}
+
 namespace HalfPixel
 {
 	using namespace DirectX;
@@ -2892,7 +2942,6 @@ static void ApplyPatches(const bool HasRegistry)
 	using namespace Memory;
 	using namespace hook::txn;
 
-	// TODO: Check this against HiDPI
 	DesktopWidth = GetSystemMetrics(SM_CXSCREEN);
 	DesktopHeight = GetSystemMetrics(SM_CYSCREEN);
 
@@ -2937,10 +2986,12 @@ static void ApplyPatches(const bool HasRegistry)
 	{
 		auto check_for_device_lost = pattern("68 ? ? ? ? 50 FF 52 40").get_one();
 		auto caps = *get_pattern<D3DCAPS9*>("BF ? ? ? ? F3 A5 A1 ? ? ? ? 85 C0", 1);
+		auto d3d = *get_pattern<IDirect3D9**>("8B 0D ? ? ? ? 56 8B 74 24 0C", 2);
 
 		gd3dPP = *check_for_device_lost.get<D3DPRESENT_PARAMETERS*>(1);
 		gpd3dDevice = *check_for_device_lost.get<IDirect3DDevice9**>(-7 + 1);
 		gD3DCaps = caps;
+		gpD3D = d3d;
 
 		HasCored3d = true;
 	}
@@ -3408,6 +3459,57 @@ static void ApplyPatches(const bool HasRegistry)
 		// Not likely to be used anytime soon but it'll act as a failsafe just in case
 		ReadCall(get_display_mode_count, orgGetDisplayModeCount);
 		InjectHook(get_display_mode_count, GetDisplayModeCount_RelocateArray);
+	}
+	TXN_CATCH();
+
+
+	// Do not crash if starting in fullscreen with an invalid resolution, instead try to find the closest matching resolution
+	// Requires: CoreD3D
+	if (HasCored3d && HasGraphics) try
+	{
+		using namespace FindClosestDisplayMode;	
+
+		auto create_d3d_device = get_pattern("E8 ? ? ? ? 3B C3 0F 85 ? ? ? ? E8 ? ? ? ? A1 ? ? ? ? 8B 08");
+		InterceptCall(create_d3d_device, orgCreateD3DDevice, FindClosestDisplayMode_CreateD3DDevice);
+	}
+	TXN_CATCH();
+
+
+	// Default to desktop resolution
+	try
+	{
+		DEVMODEW displaySettings;
+		displaySettings.dmSize = sizeof(displaySettings);
+		displaySettings.dmDriverExtra = 0;
+		if (EnumDisplaySettingsW(nullptr, ENUM_CURRENT_SETTINGS, &displaySettings) != FALSE)
+		{
+			gResolutionWidthPixels = displaySettings.dmPelsWidth;
+			gResolutionHeightPixels = displaySettings.dmPelsHeight;
+
+			auto set_defaults = pattern("C7 44 24 ? 80 02 00 00 C7 44 24 ? E0 01 00 00 89 44 24 28").get_one();
+			void* widths_to_patch[] = {
+				get_pattern("68 80 02 00 00 68 ? ? ? ? 68 ? ? ? ? E8 ? ? ? ? 50 E8", 1),
+				get_pattern("68 80 02 00 00 68 ? ? ? ? 68 ? ? ? ? 89 44 24", 1),
+				set_defaults.get<void>(4),
+				get_pattern("68 80 02 00 00 68 ? ? ? ? 68 ? ? ? ? 8B E8", 1),
+			};
+
+			void* heights_to_patch[] = {
+				get_pattern("68 E0 01 00 00 68 ? ? ? ? 68 ? ? ? ? 8B F8 E8 ? ? ? ? 50 E8", 1),
+				get_pattern("68 E0 01 00 00 68 ? ? ? ? 68 ? ? ? ? 89 44 24", 1),
+				set_defaults.get<void>(8 + 4),
+				get_pattern("68 E0 01 00 00 68 ? ? ? ? 68 ? ? ? ? E8 ? ? ? ? 6A 00", 1),
+			};
+
+			for (void* addr : widths_to_patch)
+			{
+				Patch<uint32_t>(addr, displaySettings.dmPelsWidth);
+			}
+			for (void* addr : heights_to_patch)
+			{
+				Patch<uint32_t>(addr, displaySettings.dmPelsHeight);
+			}
+		}
 	}
 	TXN_CATCH();
 

@@ -12,6 +12,8 @@ static constexpr uint32_t TEXT_LANG_ITALIAN = 4;
 static constexpr uint32_t TEXT_LANG_POLISH = 5;
 static constexpr uint32_t TEXT_LANG_CZECH = 6;
 
+inline uint32_t gResolutionWidthPixels = 640, gResolutionHeightPixels = 480;
+
 inline char* gszTempString;
 inline uint8_t* gKeyboardData;
 

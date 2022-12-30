@@ -329,6 +329,7 @@ inline D3DViewport** gpFullScreenViewport;
 inline D3DViewport** gpCurrentViewport;
 
 inline D3DPRESENT_PARAMETERS* gd3dPP;
+inline IDirect3D9** gpD3D;
 inline IDirect3DDevice9** gpd3dDevice;
 inline D3DCAPS9* gD3DCaps;
 

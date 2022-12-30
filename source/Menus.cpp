@@ -282,9 +282,8 @@ void PC_GraphicsAdvanced_LoadSettings()
 	const int32_t Adapter = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"ADAPTER").value_or(0);
 	const uint32_t NumAdapters = Graphics_GetNumAdapters();
 
-	// TODO: Desktop resolution
-	const uint32_t Width = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"WIDTH").value_or(640);
-	const uint32_t Height = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"HEIGHT").value_or(480);
+	const uint32_t Width = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"WIDTH").value_or(gResolutionWidthPixels);
+	const uint32_t Height = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"HEIGHT").value_or(gResolutionHeightPixels);
 
 	const Graphics_Config& config = Graphics_GetCurrentConfig();
 	Graphics_CheckForVertexShaders(config.m_adapter, 0, 1);
