@@ -2698,7 +2698,6 @@ static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFront
 	};
 
 	// Restored languages in Polish
-	// TODO: Tidy up
 	if (HasGameInfo && HasRegistry) try
 	{
 		using namespace Localization;
@@ -2711,7 +2710,7 @@ static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFront
 
 		// Un-hardcoded co-driver language
 		// Patch will probably fail pattern matches on set_defaults when used on the English executable
-		if (WantsCoDrivers || WantsNickyGristPatched) try
+		if (WantsCoDrivers || WantsNickyGristPatched)
 		{
 			auto get_codriver_language = ReadCallFrom(get_pattern("E8 ? ? ? ? 83 F8 03 77 40"));
 			auto set_codriver_language = ReadCallFrom(get_pattern("E8 ? ? ? ? 8B 4F 24"));
@@ -2730,7 +2729,6 @@ static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFront
 			// Unknown, called once as main menu starts
 			InterceptCall(unk_on_main_menu_start, orgSetUnknown, setUnknown_AndCoDriverLanguage);
 		}
-		TXN_CATCH();
 	}
 	TXN_CATCH();
 
