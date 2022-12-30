@@ -242,6 +242,18 @@ namespace Localization
 		return count;
 	}
 
+	static uint32_t (*orgGameInfo_GetCoDriverLanguage_NoNickyGrist)();
+	uint32_t GameInfo_GetCoDriverLanguage_NoNickyGrist()
+	{
+		return std::max(1u, orgGameInfo_GetCoDriverLanguage_NoNickyGrist()) - 1;
+	}
+
+	static void (*orgGameInfo_SetCoDriverLanguage_NoNickyGrist)(uint32_t);
+	void GameInfo_SetCoDriverLanguage_NoNickyGrist(uint32_t langID)
+	{
+		orgGameInfo_SetCoDriverLanguage_NoNickyGrist(langID + 1);
+	}
+
 	namespace FontReloading
 	{
 		static void (*FrontEndFonts_Load)();
@@ -606,11 +618,16 @@ namespace ConsistentLanguagesScreen
 	// Also supporting multi7 now
 	static const char* GetCoDriverName()
 	{
-		const std::array<uint32_t, 8> coDriverNames = {
+		std::vector<uint32_t> coDriverNames = {
 			445, 447, 449, 448, 450, Language::CODRIVER_POLISH_A, Language::CODRIVER_POLISH_B, Language::CODRIVER_CZECH
 		};
-	
-		// TODO: Exclude Nicky Grist if needed
+
+		const bool excludeNickyGrist = Menus::Patches::MultipleCoDriversPatched && !Version::HasNickyGristFiles();
+		if (excludeNickyGrist)
+		{
+			coDriverNames.erase(coDriverNames.begin());
+		}
+
 		uint32_t langID = gmoFrontEndMenus[MenuID::LANGUAGE].m_entries[1].m_value;
 		if (langID >= coDriverNames.size())
 		{
@@ -2567,7 +2584,7 @@ static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFront
 {
 	const bool WantsTexts = Version::HasMultipleLocales();
 	const bool WantsCoDrivers = Version::HasMultipleCoDrivers();
-	const bool WantsNickyGristPatched = Version::IsPolish() && Version::HasNickyGristFiles();
+	const bool WantsNickyGristPatched = Version::HasNickyGristFiles();
 
 	using namespace Memory;
 	using namespace hook::txn;
@@ -2917,6 +2934,8 @@ static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFront
 	// Multi7 co-drivers
 	if (HasGameInfo && WantsCoDrivers) try
 	{
+		using namespace Localization;
+
 		void* sprintf_cod;
 		try
 		{
@@ -2927,6 +2946,17 @@ static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFront
 		{
 			sprintf_cod = get_pattern("52 E8 ? ? ? ? 83 C4 0C 68", 1);
 		}
+
+		// Only do this if Nicky Grist files are absent
+		if (!WantsNickyGristPatched)
+		{
+			auto language_init_codriver = get_pattern("E8 ? ? ? ? 25 ? ? ? ? 89 46 4C");
+			auto language_exit_codriver = get_pattern("E8 ? ? ? ? 8B ? 4C 50 E8", 5+4);
+
+			InterceptCall(language_init_codriver, orgGameInfo_GetCoDriverLanguage_NoNickyGrist, GameInfo_GetCoDriverLanguage_NoNickyGrist);
+			InterceptCall(language_exit_codriver, orgGameInfo_SetCoDriverLanguage_NoNickyGrist, GameInfo_SetCoDriverLanguage_NoNickyGrist);
+		}
+
 		InjectHook(sprintf_cod, Localization::sprintf_cod);
 
 		Menus::Patches::MultipleCoDriversPatched = true;

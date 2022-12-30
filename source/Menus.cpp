@@ -114,7 +114,7 @@ void DrawLeftRightArrows_RightAlign(MenuDefinition* menu, uint32_t entryID, floa
 
 void FrontEndMenuSystem_SetupMenus_Custom(int languagesOnly)
 {
-	if (Version::IsPolish() && (Version::HasNickyGristFiles() || Menus::Patches::MultipleTextsPatched))
+	if (Version::IsPolish() && ((Version::HasNickyGristFiles() && Menus::Patches::MultipleCoDriversPatched) || Menus::Patches::MultipleTextsPatched))
 	{
 		// Re-enable Languages screen
 		gmoFrontEndMenus[17].m_entries[3].m_canBeSelected = 1;
