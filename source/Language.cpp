@@ -68,10 +68,11 @@ static std::map<uint32_t, const char*> GetNewStrings()
 		{ FULLSCREEN, "FULLSCREEN" },
 		{ WINDOWED, "WINDOWED" },
 		{ BORDERLESS, "BORDERLESS" },
+		{ REFRESH_RATE, "REFRESH RATE" },
 		{ VSYNC, "VSYNC" },
 		{ ANISOTROPIC, "ANISOTROPIC FILTERING" },
 
-		{ TACHOMETER, "TACHO" },
+		{ TACHOMETER, "TACHOMETER" },
 		{ EXTERIOR_FOV, "FOV (CHASE)" },
 		{ INTERIOR_FOV, "FOV (INTERIOR)" },
 	};

@@ -184,13 +184,13 @@ void FrontEndMenuSystem_SetupMenus_Custom(int languagesOnly)
 		{
 			// Make space for Anisotropic Filtering
 			auto* optSource = &menu.m_entries[7];
-			auto* optDest = optSource + 3;
+			auto* optDest = optSource + 4;
 			memmove(optDest, optSource, 4 * sizeof(*optSource));
 		}
 		{
 			// Make space for Display Mode and VSync
 			auto* optSource = &menu.m_entries[3];
-			auto* optDest = optSource + 2;
+			auto* optDest = optSource + 3;
 			memmove(optDest, optSource, 4 * sizeof(*optSource));
 		}
 
@@ -274,7 +274,6 @@ void PC_GraphicsAdvanced_SetGraphicsFromPresetQuality()
 	CMR_FE_SetEnvironmentMap(menu.m_entries[GRAPHICS_ADV_ENVMAP].m_value);
 	CMR_FE_SetDrawShadow(menu.m_entries[GRAPHICS_ADV_SHADOWS].m_value);
 	CMR_FE_SetDrawDistance(static_cast<uint32_t>(menu.m_entries[GRAPHICS_ADV_DRAWDISTANCE].m_value * 19.444444f + 80.0f));
-	CMR_FE_SetAnisotropicLevel(menu.m_entries[GRAPHICS_ADV_ANISOTROPIC].m_value);
 }
 
 void PC_GraphicsAdvanced_LoadSettings()
@@ -318,7 +317,9 @@ void PC_GraphicsAdvanced_LoadSettings()
 	menu.m_entries[GRAPHICS_ADV_GAMMA].m_value = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"GAMMA").value_or(1);
 
 	// New SP options
+	const MenuResolutionEntry* resolutionEntry = GetMenuResolutionEntry(menu.m_entries[GRAPHICS_ADV_DRIVER].m_value, menu.m_entries[GRAPHICS_ADV_RESOLUTION].m_value);
 	menu.m_entries[GRAPHICS_ADV_DISPLAYMODE].m_value = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, Registry::DISPLAY_MODE_KEY_NAME).value_or(0);
+	menu.m_entries[GRAPHICS_ADV_REFRESHRATE].m_value = CMR_GetRefreshRateIndex(resolutionEntry, Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, Registry::REFRESH_RATE_KEY_NAME).value_or(0));
 	menu.m_entries[GRAPHICS_ADV_VSYNC].m_value = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, Registry::VSYNC_KEY_NAME).value_or(1);
 	menu.m_entries[GRAPHICS_ADV_ANISOTROPIC].m_value = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, Registry::ANISOTROPIC_KEY_NAME).value_or(0);
 
@@ -329,8 +330,9 @@ void PC_GraphicsAdvanced_LoadSettings()
 	Graphics_SetGammaRamp(0, menu.m_entries[GRAPHICS_ADV_GAMMA].m_value * 0.6111111f + 0.5f);
 	menu.m_entries[GRAPHICS_ADV_DRAWDISTANCE].m_value = static_cast<int>((CMR_FE_GetDrawDistance() - 80.0f) / 19.44444f + 0.5f);
 
-	menu.m_entries[0].m_entryDataInt = NumAdapters;
-	menu.m_entries[1].m_entryDataInt = CMR_ValidateModeFormats(Adapter);
+	menu.m_entries[GRAPHICS_ADV_DRIVER].m_entryDataInt = NumAdapters;
+	menu.m_entries[GRAPHICS_ADV_RESOLUTION].m_entryDataInt = CMR_ValidateModeFormats(Adapter);
+	menu.m_entries[GRAPHICS_ADV_REFRESHRATE].m_entryDataInt = CMR_GetNumRefreshRates(resolutionEntry);
 }
 
 void PC_GraphicsAdvanced_SaveSettings()
@@ -371,11 +373,12 @@ void PC_GraphicsAdvanced_SaveSettings()
 
 	// New SP options
 	Registry::SetRegistryDword(Registry::REGISTRY_SECTION_NAME, Registry::DISPLAY_MODE_KEY_NAME, menu.m_entries[GRAPHICS_ADV_DISPLAYMODE].m_value);
+	Registry::SetRegistryDword(Registry::REGISTRY_SECTION_NAME, Registry::REFRESH_RATE_KEY_NAME, CMR_GetRefreshRateFromIndex(ResolutionEntry, menu.m_entries[GRAPHICS_ADV_REFRESHRATE].m_value));
 	Registry::SetRegistryDword(Registry::REGISTRY_SECTION_NAME, Registry::VSYNC_KEY_NAME, menu.m_entries[GRAPHICS_ADV_VSYNC].m_value);
 	Registry::SetRegistryDword(Registry::REGISTRY_SECTION_NAME, Registry::ANISOTROPIC_KEY_NAME, menu.m_entries[GRAPHICS_ADV_ANISOTROPIC].m_value);
 }
 
-static int gSavedDriver, gSavedResolution, gSavedZDepth, gSavedDisplayMode, gSavedFSAA, gSavedVSync, gSavedAF;
+static int gSavedDriver, gSavedResolution, gSavedZDepth, gSavedDisplayMode, gSavedFSAA, gSavedVSync, gSavedRefreshRate, gSavedAF;
 void PC_GraphicsAdvanced_Enter_NewOptions(MenuDefinition* menu, int /*a2*/)
 {
 	using namespace EntryID;
@@ -388,6 +391,7 @@ void PC_GraphicsAdvanced_Enter_NewOptions(MenuDefinition* menu, int /*a2*/)
 	gSavedDisplayMode = menu->m_entries[GRAPHICS_ADV_DISPLAYMODE].m_value;
 	gSavedFSAA = menu->m_entries[GRAPHICS_ADV_FSAA].m_value;
 	gSavedVSync = menu->m_entries[GRAPHICS_ADV_VSYNC].m_value;
+	gSavedRefreshRate = menu->m_entries[GRAPHICS_ADV_REFRESHRATE].m_value;
 	gSavedAF = menu->m_entries[GRAPHICS_ADV_ANISOTROPIC].m_value;
 }
 
@@ -405,6 +409,7 @@ MenuDefinition* PC_GraphicsAdvanced_Select_NewOptions(MenuDefinition* menu, Menu
 		|| gSavedDisplayMode != menu->m_entries[GRAPHICS_ADV_DISPLAYMODE].m_value
 		|| gSavedFSAA != menu->m_entries[GRAPHICS_ADV_FSAA].m_value
 		|| gSavedVSync != menu->m_entries[GRAPHICS_ADV_VSYNC].m_value
+		|| gSavedRefreshRate != menu->m_entries[GRAPHICS_ADV_REFRESHRATE].m_value
 		|| gSavedAF != menu->m_entries[GRAPHICS_ADV_ANISOTROPIC].m_value)
 	{
 		CMR_SetupRender();
@@ -444,6 +449,24 @@ void PC_GraphicsAdvanced_Display_NewOptions(MenuDefinition* menu, float interp, 
 		const int leftArrowTextLength = CMR3Font_GetTextWidth(0, gszTempString);
 
 		target += sprintf_s(target, targetEnd - target, " %s ", Language_GetString(stringsByOption[menu->m_entries[EntryID::GRAPHICS_ADV_DISPLAYMODE].m_value]));
+		const int rightArrowTextLength = CMR3Font_GetTextWidth(0, gszTempString);
+
+		DrawLeftRightArrows_RightAlign(menu, entryID, interp, leftArrowTextLength + 393, rightArrowTextLength + 393, posY);
+		break;
+	}
+	case EntryID::GRAPHICS_ADV_REFRESHRATE:
+	{
+		char* target = gszTempString;
+		char* const targetEnd = target+512;
+
+		target += sprintf_s(target, targetEnd - target, "%s: ", Language_GetString(Language::REFRESH_RATE));
+		const int leftArrowTextLength = CMR3Font_GetTextWidth(0, gszTempString);
+
+		uint32_t refreshRate = CMR_GetRefreshRateFromIndex(GetMenuResolutionEntry(
+			menu->m_entries[EntryID::GRAPHICS_ADV_DRIVER].m_value, menu->m_entries[EntryID::GRAPHICS_ADV_RESOLUTION].m_value),
+			menu->m_entries[EntryID::GRAPHICS_ADV_REFRESHRATE].m_value);
+		
+		target += sprintf_s(target, targetEnd - target, " %uHZ ", refreshRate);
 		const int rightArrowTextLength = CMR3Font_GetTextWidth(0, gszTempString);
 
 		DrawLeftRightArrows_RightAlign(menu, entryID, interp, leftArrowTextLength + 393, rightArrowTextLength + 393, posY);

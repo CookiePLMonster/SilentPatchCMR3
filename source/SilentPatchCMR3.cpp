@@ -2256,6 +2256,61 @@ namespace ScaledTexturesSupport
 
 namespace NewAdvancedGraphicsOptions
 {
+	std::map<std::tuple<uint32_t, uint32_t, int32_t>, std::vector<uint32_t>> refreshRatesMap; // Width/height/bit depth
+
+	int32_t GetBitDepth(D3DFORMAT format)
+	{
+		switch (format)
+		{
+		case D3DFMT_R8G8B8:
+		case D3DFMT_A8R8G8B8:
+		case D3DFMT_X8R8G8B8:
+			return 1;
+		case D3DFMT_R5G6B5:
+		case D3DFMT_X1R5G5B5:
+		case D3DFMT_A1R5G5B5:
+			return 0;
+		default:
+			break;
+		}
+
+		return -1;
+	}
+
+	const std::vector<uint32_t>* GetRefreshRatesForMenuEntry(const MenuResolutionEntry* entry)
+	{
+		auto it = refreshRatesMap.find({entry->m_width, entry->m_height, GetBitDepth(entry->m_format)});
+		if (it != refreshRatesMap.end())
+		{
+			return &it->second;
+		}
+		return nullptr;
+	}
+
+	static uint32_t (*orgGetNumModes)(uint32_t adapter);
+	uint32_t GetNumModes_PopulateRefreshRates(uint32_t adapter)
+	{
+		const uint32_t numModes = orgGetNumModes(adapter);
+
+		refreshRatesMap.clear();
+		for (uint32_t i = 0; i < numModes; i++)
+		{
+			const Graphics_Mode* mode = Graphics_GetMode(adapter, i);
+
+			const int32_t bitDepth = GetBitDepth(mode->m_format);
+			if (mode->m_isValid == 0 || bitDepth < 0)
+			{
+				continue;
+			}
+
+			auto& rate = refreshRatesMap[{mode->m_width, mode->m_height, bitDepth}];
+			rate.insert(std::lower_bound(rate.begin(), rate.end(), mode->m_refreshRate), mode->m_refreshRate);
+		}
+
+		return numModes;
+	}
+
+
 	BOOL WINAPI AdjustWindowRectEx_NOP(LPRECT /*lpRect*/, DWORD /*dwStyle*/, BOOL /*bMenu*/, DWORD /*dwExStyle*/)
 	{
 		return TRUE;
@@ -2335,6 +2390,8 @@ namespace NewAdvancedGraphicsOptions
 
 		config->m_presentationInterval = GetRegistryDword(REGISTRY_SECTION_NAME, VSYNC_KEY_NAME).value_or(1) != 0
 					? D3DPRESENT_INTERVAL_ONE : D3DPRESENT_INTERVAL_IMMEDIATE;
+
+		config->m_refreshRate = GetRegistryDword(REGISTRY_SECTION_NAME, REFRESH_RATE_KEY_NAME).value_or(0);
 
 		CMR_FE_SetAnisotropicLevel(GetRegistryDword(REGISTRY_SECTION_NAME, ANISOTROPIC_KEY_NAME).value_or(0));
 
@@ -2516,9 +2573,11 @@ namespace NewAdvancedGraphicsOptions
 	}
 
 	static int gnCurrentWindowMode;
+	static int gnCurrentDisplayMode;
 	int PC_GraphicsAdvanced_Handle_NewOptions(MenuDefinition* menu, uint32_t a2, int a3)
 	{
 		const int adapter = menu->m_entries[EntryID::GRAPHICS_ADV_DRIVER].m_value;
+		const int displayMode = menu->m_entries[EntryID::GRAPHICS_ADV_RESOLUTION].m_value;
 		const Graphics_Config& config = Graphics_GetCurrentConfig();
 
 		// Only care about switching to/from windowed mode, incl. borderless
@@ -2528,6 +2587,15 @@ namespace NewAdvancedGraphicsOptions
 			PC_GraphicsAdvanced_PopulateFromCaps_NewOptions(menu, adapter, adapter);
 		}
 		gnCurrentWindowMode = config.m_windowed;
+
+		if (displayMode != gnCurrentDisplayMode)
+		{
+			const int numRefreshRates = CMR_GetNumRefreshRates(GetMenuResolutionEntry(adapter, displayMode));
+			menu->m_entries[EntryID::GRAPHICS_ADV_REFRESHRATE].m_entryDataInt = numRefreshRates;
+			menu->m_entries[EntryID::GRAPHICS_ADV_REFRESHRATE].m_value = std::max(1, numRefreshRates) - 1;
+
+			gnCurrentDisplayMode = displayMode;
+		}
 
 		return PC_GraphicsAdvanced_Handle_Original(menu, a2, a3);
 	}
@@ -2541,6 +2609,11 @@ namespace NewAdvancedGraphicsOptions
 
 		config->m_presentationInterval = gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_entries[EntryID::GRAPHICS_ADV_VSYNC].m_value != 0
 			? D3DPRESENT_INTERVAL_ONE : D3DPRESENT_INTERVAL_IMMEDIATE;
+
+		config->m_refreshRate = CMR_GetRefreshRateFromIndex(GetMenuResolutionEntry(
+			gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_entries[EntryID::GRAPHICS_ADV_DRIVER].m_value,
+			gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_entries[EntryID::GRAPHICS_ADV_RESOLUTION].m_value),
+			gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_entries[EntryID::GRAPHICS_ADV_REFRESHRATE].m_value);
 
 		CMR_FE_SetAnisotropicLevel(gmoFrontEndMenus[MenuID::GRAPHICS_ADVANCED].m_entries[EntryID::GRAPHICS_ADV_ANISOTROPIC].m_value);
 
@@ -2601,6 +2674,40 @@ namespace NewAdvancedGraphicsOptions
 	{
 		return D3DTEXF_ANISOTROPIC;
 	}
+}
+
+uint32_t CMR_GetNumRefreshRates(const MenuResolutionEntry* entry)
+{
+	const auto* rates = NewAdvancedGraphicsOptions::GetRefreshRatesForMenuEntry(entry);
+	return rates != nullptr ? rates->size() : 0;
+}
+
+uint32_t CMR_GetRefreshRateIndex(const MenuResolutionEntry* entry, uint32_t refreshRate)
+{
+	const auto* rates = NewAdvancedGraphicsOptions::GetRefreshRatesForMenuEntry(entry);
+	if (rates == nullptr)
+	{
+		return 0;
+	}
+
+	auto it = std::find(rates->begin(), rates->end(), refreshRate);
+	if (it != rates->end())
+	{
+		return std::distance(rates->begin(), it);
+	}
+	
+	// If refresh rate doesn't exist, get the "top" one
+	return std::max(1u, rates->size()) - 1;
+}
+
+uint32_t CMR_GetRefreshRateFromIndex(const MenuResolutionEntry* entry, uint32_t index)
+{
+	const auto* rates = NewAdvancedGraphicsOptions::GetRefreshRatesForMenuEntry(entry);
+	if (rates->size() > index)
+	{
+		return (*rates)[index];
+	}
+	return 0;
 }
 
 namespace NewGraphicsOptions
@@ -3418,6 +3525,8 @@ static void ApplyPatches(const bool HasRegistry)
 	{
 		auto set_gamma_ramp = get_pattern("D9 44 24 08 81 EC");
 		auto get_num_adapters = ReadCallFrom(get_pattern("E8 ? ? ? ? 8B F8 32 DB"));
+		//auto get_num_modes = ReadCallFrom(get_pattern("55 E8 ? ? ? ? 33 C9 3B C1 89 44 24", 1));
+		auto get_mode = ReadCallFrom(get_pattern("E8 ? ? ? ? 8B F0 32 C9"));
 		auto get_current_config = reinterpret_cast<uintptr_t>(ReadCallFrom(get_pattern("E8 ? ? ? ? 51 8B 7C 24 68")));
 		auto check_for_vertex_shaders = [] {
 			try
@@ -3443,6 +3552,8 @@ static void ApplyPatches(const bool HasRegistry)
 
 		Graphics_SetGammaRamp = reinterpret_cast<decltype(Graphics_SetGammaRamp)>(set_gamma_ramp);
 		Graphics_GetNumAdapters = reinterpret_cast<decltype(Graphics_GetNumAdapters)>(get_num_adapters);
+		//Graphics_GetNumModes = reinterpret_cast<decltype(Graphics_GetNumModes)>(get_num_modes);
+		Graphics_GetMode = reinterpret_cast<decltype(Graphics_GetMode)>(get_mode);
 		Graphics_CheckForVertexShaders = reinterpret_cast<decltype(Graphics_CheckForVertexShaders)>(check_for_vertex_shaders);
 		Graphics_GetAdapterCaps = reinterpret_cast<decltype(Graphics_GetAdapterCaps)>(get_adapter_caps);
 
@@ -3844,8 +3955,7 @@ static void ApplyPatches(const bool HasRegistry)
 
 		// Set up for runtime patching of the hardcoded 128 resolutions list if there is a need
 		// Not likely to be used anytime soon but it'll act as a failsafe just in case
-		ReadCall(get_display_mode_count, orgGetDisplayModeCount);
-		InjectHook(get_display_mode_count, GetDisplayModeCount_RelocateArray);
+		InterceptCall(get_display_mode_count, orgGetDisplayModeCount, GetDisplayModeCount_RelocateArray);
 	}
 	TXN_CATCH();
 
@@ -4802,7 +4912,7 @@ static void ApplyPatches(const bool HasRegistry)
 
 
 	// Additional Advanced Graphics options
-	// Windowed Mode, VSync, Anisotropic Filtering
+	// Windowed Mode, VSync, Anisotropic Filtering, Refresh Rate
 	// Requires patches: Registry (for saving/loading), Core D3D (for resizing windows), Graphics, RenderState (for AF)
 	if (HasRegistry && HasCored3d && HasDestruct && HasGraphics && HasRenderState) try
 	{
@@ -4839,6 +4949,8 @@ static void ApplyPatches(const bool HasRegistry)
 			auto set_window_pos_adjust = pattern("50 FF 15 ? ? ? ? A1 ? ? ? ? 8B 0D ? ? ? ? 89 44 24 0C").get_one();
 			auto disable_gamma_for_window = get_pattern("56 57 55 50 E8 ? ? ? ? B9 4C 00 00 00", 4);
 
+			auto get_num_modes = get_pattern("55 E8 ? ? ? ? 33 C9 3B C1 89 44 24", 1);
+
 			ghInstance = *get_pattern<HINSTANCE*>("89 3D ? ? ? ? 89 44 24 14", 2);
 
 			Patch(nop_adjust_windowrect, &pAdjustWindowRectEx_NOP);
@@ -4852,6 +4964,8 @@ static void ApplyPatches(const bool HasRegistry)
 			Patch(set_window_pos_adjust.get<void>(1 + 2), &pSetWindowPos_Adjust);
 
 			InterceptCall(disable_gamma_for_window, orgGraphics_GetAdapterCaps, Graphics_GetAdapterCaps_DisableGammaForWindow);
+
+			InterceptCall(get_num_modes, orgGetNumModes, GetNumModes_PopulateRefreshRates);
 
 			// NOP gamma changes in windowed mode so switching to windowed mode doesn't reset the option
 			Nop(gamma_on_adapter_change.get<void>(0x12), 10);
@@ -5023,7 +5137,7 @@ static void ApplyPatches(const bool HasRegistry)
 			void** orgJumpTable = *advanced_graphics_display_jump_table.get<void**>(4 + 0xB + 3);
 			static const void* advanced_graphics_display_new_jump_table[EntryID::GRAPHICS_ADV_NUM] = {
 				orgJumpTable[0], orgJumpTable[1], orgJumpTable[2],
-				&PC_GraphicsAdvanced_Display_CaseNewOptions, &PC_GraphicsAdvanced_Display_CaseNewOptions,
+				&PC_GraphicsAdvanced_Display_CaseNewOptions, &PC_GraphicsAdvanced_Display_CaseNewOptions, &PC_GraphicsAdvanced_Display_CaseNewOptions,
 				orgJumpTable[3], orgJumpTable[4], orgJumpTable[5], orgJumpTable[6], &PC_GraphicsAdvanced_Display_CaseNewOptions, orgJumpTable[7], orgJumpTable[8],
 				orgJumpTable[9], orgJumpTable[10]
 			};

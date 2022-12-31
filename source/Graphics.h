@@ -46,6 +46,16 @@ struct MenuResolutionEntry
 };
 static_assert(sizeof(MenuResolutionEntry) == 104, "Wrong size: MenuResolutionEntry");
 
+struct Graphics_Mode
+{
+	uint32_t m_width;
+	uint32_t m_height;
+	D3DFORMAT m_format;
+	uint32_t m_refreshRate;
+	uint32_t m_isValid;
+};
+static_assert(sizeof(Graphics_Mode) == 0x14, "Wrong size: Graphics_Mode");
+
 
 struct D3DViewport
 {
@@ -305,6 +315,8 @@ inline void (*Keyboard_DrawTextEntryBox)(int posX, int posY, int a3, int a4, uin
 
 inline void (*Graphics_SetGammaRamp)(int flag, float gamma);
 inline uint32_t (*Graphics_GetNumAdapters)();
+//inline uint32_t (*Graphics_GetNumModes)(uint32_t adapter);
+inline Graphics_Mode* (*Graphics_GetMode)(uint32_t adapter, uint32_t index);
 inline void (*Graphics_CheckForVertexShaders)(int, int, int);
 inline D3DCAPS9* (*Graphics_GetAdapterCaps)(D3DCAPS9* hdc, int index);
 
@@ -321,6 +333,10 @@ uint32_t CMR_FE_GetMaxAnisotropicLevel(int adapter);
 uint32_t CMR_GetAnisotropicLevel();
 
 inline const MenuResolutionEntry* (*GetMenuResolutionEntry)(int32_t, int32_t);
+
+uint32_t CMR_GetNumRefreshRates(const MenuResolutionEntry* entry);
+uint32_t CMR_GetRefreshRateIndex(const MenuResolutionEntry* entry, uint32_t refreshRate);
+uint32_t CMR_GetRefreshRateFromIndex(const MenuResolutionEntry* entry, uint32_t index);
 
 inline uint8_t (*GameInfo_GetNumberOfPlayersInThisRace)();
 

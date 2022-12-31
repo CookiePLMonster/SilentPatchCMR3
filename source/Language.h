@@ -23,12 +23,13 @@ namespace Language
 	static constexpr uint32_t WINDOWED = FIRST_SP_STRING+8;
 	static constexpr uint32_t BORDERLESS = FIRST_SP_STRING+9;
 
-	static constexpr uint32_t VSYNC = FIRST_SP_STRING+10;
-	static constexpr uint32_t ANISOTROPIC = FIRST_SP_STRING+11;
+	static constexpr uint32_t REFRESH_RATE = FIRST_SP_STRING+10;
+	static constexpr uint32_t VSYNC = FIRST_SP_STRING+11;
+	static constexpr uint32_t ANISOTROPIC = FIRST_SP_STRING+12;
 
-	static constexpr uint32_t TACHOMETER = FIRST_SP_STRING+12;
-	static constexpr uint32_t EXTERIOR_FOV = FIRST_SP_STRING+13;
-	static constexpr uint32_t INTERIOR_FOV = FIRST_SP_STRING+14;
+	static constexpr uint32_t TACHOMETER = FIRST_SP_STRING+13;
+	static constexpr uint32_t EXTERIOR_FOV = FIRST_SP_STRING+14;
+	static constexpr uint32_t INTERIOR_FOV = FIRST_SP_STRING+15;
 }
 
 const char* Language_GetString(uint32_t ID);
