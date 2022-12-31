@@ -921,7 +921,7 @@ namespace SPText
 		text.append(".");
 		text.append(std::to_string(rsc_BuildID));
 #endif
-		text.append(" (" __DATE__ ")\nDetected executable: ");
+		text.append(" (" __DATE__ ")^Detected executable: ");
 
 		switch (Version::ExecutableVersion)
 		{
@@ -967,7 +967,7 @@ namespace SPText
 
 		if (!optionalComponents.empty())
 		{
-			text.append("\nOptional components: ");
+			text.append("^Optional components: ");
 			text.append(std::accumulate(std::next(optionalComponents.begin()), optionalComponents.end(), optionalComponents.front(),
 				[](const std::string& a, const std::string& b) {
 					return a + ", " + b;
