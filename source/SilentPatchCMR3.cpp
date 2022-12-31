@@ -464,6 +464,144 @@ namespace Cubes
 	}
 }
 
+namespace SecretsScreen
+{
+	static const char gEnglishText[] = "CALLS COST \xA3" "1 PER MINUTE. ROI: CALLS COST 1.27 EUROS PER MINUTE INC. VAT. CALLS FROM MOBILES VARY. CALLERS MUST BE OVER 16 AND HAVE PERMISSION FROM THE BILL PAYER. PRICES CORRECT AT TIME OF GOING TO PRESS.     ";
+	static const char gFrenchText[] = "SERVICE CONNECTION RCB 328 223 466  COUT DE L\x27" "APPEL 0,337 EURO/MIN TTC. LE CO\xDBT DES APPELS \xC0 PARTIR D\x27N T\xC9L\xC9PHONE PORTABLE EST VARIABLE. POUR APPELER, VOUS DEVEZ AVOIR AU MOINS 16 ANS ET OBTENIR L\x27" "AUTORISATION DE LA PERSONNE PAYANT LES FACTURES DE T\xC9L\xC9PHONE. LES PRIX INDIQU\xC9S \xC9TAIENT CORRECTS AU MOMENT DE L\x27IMPRESSION.     ";
+	static const char gGermanText[] = "ANRUFE KOSTEN 1.24 EURO PRO MINUTE. KOSTEN F\xDCR ANRUFE VON MOBILTELEFONEN AUS K\xD6NNEN VARIIEREN. ANRUFER M\xDCSSEN MINDESTENS 16 JAHRE ALT SEIN UND DIE ERLAUBNIS VOM ZAHLER DER TELEFONRECHNUNG EINHOLEN. PREISE WAREN ZUR ZEIT DER DRUCKLEGUNG KORREKT.     ";
+	static const char gEmptyText[] = " ";
+
+	static char gEnglishCallsTextBuffer[std::size(gEnglishText)];
+	static char gFrenchCallsTextBuffer[std::size(gFrenchText)];
+	static char gGermanCallsTextBuffer[std::size(gGermanText)];
+	void SetUpSecretsScrollers()
+	{
+		if (GameInfo_GetTextLanguage() != TEXT_LANG_POLISH)
+		{
+			memcpy_s(gEnglishCallsTextBuffer, std::size(gEnglishCallsTextBuffer), gEnglishText, std::size(gEnglishText));
+			memcpy_s(gFrenchCallsTextBuffer, std::size(gFrenchCallsTextBuffer), gFrenchText, std::size(gFrenchText));
+			memcpy_s(gGermanCallsTextBuffer, std::size(gGermanCallsTextBuffer), gGermanText, std::size(gGermanText));
+		}
+		else
+		{
+			// No scroller texts
+			memcpy_s(gEnglishCallsTextBuffer, std::size(gEnglishCallsTextBuffer), gEmptyText, std::size(gEmptyText));
+			memcpy_s(gFrenchCallsTextBuffer, std::size(gFrenchCallsTextBuffer), gEmptyText, std::size(gEmptyText));
+			memcpy_s(gGermanCallsTextBuffer, std::size(gGermanCallsTextBuffer), gEmptyText, std::size(gEmptyText));
+		}
+	}
+
+	static int (*orgCMR3Font_GetTextWidth)(uint8_t fontID, const char* text);
+	static int CMR3Font_GetTextWidth_Scroller(uint8_t fontID, const char* /*text*/)
+	{
+		SetUpSecretsScrollers();
+		return orgCMR3Font_GetTextWidth(fontID, gEnglishCallsTextBuffer);
+	}
+
+	static int (*GetAccessCode)();
+	static void DrawSecretsScreen(uint8_t alpha)
+	{
+		const bool polishSecretsScreen = GameInfo_GetTextLanguage_LocalePackCheck() == TEXT_LANG_POLISH;
+		const uint32_t COLOR_WHITE = HandyFunction_AlphaCombineFlat(0xFFDCDCDC, alpha);
+		const uint32_t COLOR_YELLOW = HandyFunction_AlphaCombineFlat(0xFFDCDC14, alpha);
+
+		const int16_t SPACING_VERTICAL_SMALL = 17;
+		const int16_t SPACING_VERTICAL_BIG = 26;
+		const int16_t LEFT_MARGIN = 61;
+
+		const int16_t centerPosX = static_cast<int16_t>(GetScaledResolutionWidth() / 2.0f);
+
+		if (polishSecretsScreen)
+		{
+			// Polish
+			int16_t posY = 60;
+
+			CMR3Font_BlitText(0, Language_GetString(796), LEFT_MARGIN, posY, COLOR_WHITE, 33);
+			posY += SPACING_VERTICAL_SMALL;
+
+			CMR3Font_BlitText(0, BONUSCODES_URL, LEFT_MARGIN, posY, COLOR_YELLOW, 33);
+			posY += SPACING_VERTICAL_SMALL;
+			{
+				int16_t posX = LEFT_MARGIN;
+				CMR3Font_BlitText(0, Language_GetString(797), posX, posY, COLOR_WHITE, 33);
+				posX += static_cast<int16_t>(CMR3Font_GetTextWidth(0, Language_GetString(797)) + CMR3Font_GetTextWidth(0, " "));
+
+				sprintf_s(gszTempString, 512, "%.4d", GetAccessCode());
+				CMR3Font_BlitText(12, gszTempString, posX, posY + 2, COLOR_YELLOW, 33);
+				posX += static_cast<int16_t>(CMR3Font_GetTextWidth(0, " ") + CMR3Font_GetTextWidth(12, gszTempString));
+
+				CMR3Font_BlitText(0, ".", posX, posY, COLOR_WHITE, 33);
+			}
+			posY += SPACING_VERTICAL_SMALL;
+			CMR3Font_BlitText(0, Language_GetString(798), LEFT_MARGIN, posY, COLOR_WHITE, 33);
+			posY += SPACING_VERTICAL_SMALL;
+			CMR3Font_BlitText(0, Language_GetString(799), LEFT_MARGIN, posY, COLOR_WHITE, 33);
+			posY += SPACING_VERTICAL_SMALL;
+			CMR3Font_BlitText(0, Language_GetString(800), LEFT_MARGIN, posY, COLOR_WHITE, 33);
+
+			posY = 248;
+			CMR3Font_BlitText(12, Language_GetString(803), centerPosX, posY, COLOR_WHITE, 10);
+			posY += SPACING_VERTICAL_BIG;
+			CMR3Font_BlitText(12, Language_GetString(801), centerPosX, posY, COLOR_WHITE, 10);
+		}
+		else
+		{
+			// International
+
+			// Top left
+			int16_t posY = 60;
+
+			CMR3Font_BlitText(0, Language_GetString(796), LEFT_MARGIN, posY, COLOR_WHITE, 33);
+			posY += SPACING_VERTICAL_SMALL;
+			{
+				int16_t posX = LEFT_MARGIN;
+				CMR3Font_BlitText(0, Language_GetString(797), posX, posY, COLOR_WHITE, 33);
+				posX += static_cast<int16_t>(CMR3Font_GetTextWidth(0, Language_GetString(797)) + CMR3Font_GetTextWidth(0, " "));
+
+				sprintf_s(gszTempString, 512, "%.4d", GetAccessCode());
+				CMR3Font_BlitText(12, gszTempString, posX, posY + 2, COLOR_YELLOW, 33);
+				posX += static_cast<int16_t>(CMR3Font_GetTextWidth(0, " ") + CMR3Font_GetTextWidth(12, gszTempString));
+
+				CMR3Font_BlitText(0, ".", posX, posY, COLOR_WHITE, 33);
+			}
+			posY += SPACING_VERTICAL_SMALL;
+			CMR3Font_BlitText(0, Language_GetString(798), LEFT_MARGIN, posY, COLOR_WHITE, 33);
+
+			// Center
+			posY = 114;
+
+			CMR3Font_BlitText(12, Language_GetString(799), centerPosX, posY, COLOR_WHITE, 12);
+			CMR3Font_BlitText(12, " 09065 558898", centerPosX, posY, COLOR_WHITE, 9);
+			posY += SPACING_VERTICAL_BIG;
+
+			CMR3Font_BlitText(12, Language_GetString(800), centerPosX, posY, COLOR_WHITE, 12);
+			CMR3Font_BlitText(12, " 1570 92 30 50", centerPosX, posY, COLOR_WHITE, 9);
+			posY += SPACING_VERTICAL_BIG;
+
+			CMR3Font_BlitText(12, Language_GetString(801), centerPosX, posY, COLOR_WHITE, 12);
+			CMR3Font_BlitText(12, " 08 92 69 33 77", centerPosX, posY, COLOR_WHITE, 9);
+			posY += SPACING_VERTICAL_BIG;
+
+			CMR3Font_BlitText(12, Language_GetString(802), centerPosX, posY, COLOR_WHITE, 12);
+			CMR3Font_BlitText(12, " 0190 900 045", centerPosX, posY, COLOR_WHITE, 9);
+	
+			posY = 248;
+			CMR3Font_BlitText(12, Language_GetString(803), centerPosX, posY, COLOR_WHITE, 10);
+			posY += SPACING_VERTICAL_BIG;
+			CMR3Font_BlitText(12, BONUSCODES_URL, centerPosX, posY, COLOR_WHITE, 10);
+		}
+	}
+
+	static void CMR3Font_BlitText_NOP(uint8_t /*a1*/, const char* /*text*/, int16_t /*posX*/, int16_t /*posY*/, uint32_t /*color*/, int /*align*/)
+	{
+	}
+
+	static void CMR3Font_BlitText_DrawWrapper(uint8_t /*a1*/, const char* /*text*/, int16_t /*posX*/, int16_t /*posY*/, uint32_t color, int /*align*/)
+	{
+		DrawSecretsScreen((color >> 24) & 0xFF);
+	}
+}
+
 namespace OcclusionQueries
 {
 	// Divide the occlusion query results by the sample count of the backbuffer
@@ -2694,7 +2832,8 @@ namespace Graphics::Patches
 	}
 }
 
-static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFrontEnd, const bool HasGameInfo, const bool HasLanguageHook, const bool HasKeyboard, const bool HasTexture)
+static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFrontEnd, const bool HasGameInfo, const bool HasLanguageHook,
+			const bool HasKeyboard, const bool HasTexture, const bool HasCMR3Font)
 {
 	const bool WantsTexts = Version::HasMultipleLocales();
 	const bool WantsCoDrivers = Version::HasMultipleCoDrivers();
@@ -3014,6 +3153,67 @@ static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFront
 
 		InjectHook(lang2, sprintf_lang2);
 		InjectHook(lang1, sprintf_lang1);
+	}
+	TXN_CATCH();
+
+
+	// Secrets screen
+	// Applied unconditionally (for the most part) because it makes the secrets screen more consistent
+	if (HasGameInfo && HasCMR3Font && HasLanguageHook) try
+	{
+		using namespace SecretsScreen;
+
+		// Secrets screen
+		// The amount of texts to patch differs between executables, so a range check is needed
+		std::vector<void*> blits_to_nop;
+
+		auto secrets_begin = get_pattern_uintptr("C7 05 ? ? ? ? 80 02 00 00 D9 44 24 20");
+		auto secrets_end = get_pattern_uintptr("89 44 24 1C 3B FA");
+		pattern(secrets_begin, secrets_end, "68 40 01 00 00 68 ? ? ? ? E8 ? ? ? ? 50 6A ? E8").for_each_result([&](pattern_match match)
+			{
+				blits_to_nop.emplace_back(match.get<void>(18));
+			});
+		pattern(secrets_begin, secrets_end, "68 40 01 00 00 68 ? ? ? ? 6A ? E8").for_each_result([&](pattern_match match)
+			{
+				blits_to_nop.emplace_back(match.get<void>(12));
+			});
+		pattern(secrets_begin, secrets_end, "6A 3D 68 ? ? ? ? E8 ? ? ? ? 50 6A ? E8").for_each_result([&](pattern_match match)
+			{
+				blits_to_nop.emplace_back(match.get<void>(15));
+			});
+
+		// Intercept this BlitText only to get alpha from it
+		auto blit_to_intercept = pattern(secrets_begin, secrets_end, "6A 0C E8 ? ? ? ? 6A 21").get_first<void>(2);
+
+		auto get_access_code = ReadCallFrom(pattern(secrets_begin, secrets_end, "E8 ? ? ? ? E8 ? ? ? ? 50 68 ? ? ? ? 68").get_first<void>(5));
+
+		// Only bother with scrollers if the language pack got patched in
+		if (Menus::Patches::MultipleTextsPatched)
+		{
+			auto cheat_menu_enter = pattern("68 ? ? ? ? 55 C7 05 ? ? ? ? ? ? ? ? E8 ? ? ? ? 68 ? ? ? ? 55 A3 ? ? ? ? E8 ? ? ? ? 68").get_one();
+
+			auto cheat_menu_display1 = pattern(secrets_begin, secrets_end, "68 49 01 00 00 ? 68").count(2);
+			auto cheat_menu_display_german = pattern(secrets_begin, secrets_end, "68 49 01 00 00 ? ? ? 68").get_first<void>(5 + 3 + 1);
+
+			Patch(cheat_menu_enter.get<void>(1), &gEnglishCallsTextBuffer);
+			Patch(cheat_menu_display1.get(0).get<void>(6 + 1), &gEnglishCallsTextBuffer);
+
+			Patch(cheat_menu_enter.get<void>(0x15 + 1), &gFrenchCallsTextBuffer);
+			Patch(cheat_menu_display1.get(1).get<void>(6 + 1), &gFrenchCallsTextBuffer);
+
+			Patch(cheat_menu_enter.get<void>(0x25 + 1), &gGermanCallsTextBuffer);
+			Patch(cheat_menu_display_german, &gGermanCallsTextBuffer);
+
+			InterceptCall(cheat_menu_enter.get<void>(0x10), orgCMR3Font_GetTextWidth, CMR3Font_GetTextWidth_Scroller);
+		}
+
+		GetAccessCode = static_cast<decltype(GetAccessCode)>(get_access_code);
+		for (void* addr : blits_to_nop)
+		{
+			InjectHook(addr, CMR3Font_BlitText_NOP);
+		}
+
+		InjectHook(blit_to_intercept, CMR3Font_BlitText_DrawWrapper);
 	}
 	TXN_CATCH();
 
@@ -5035,7 +5235,7 @@ static void ApplyPatches(const bool HasRegistry)
 
 	
 	// Install the locale pack (if applicable)
-	ApplyMergedLocalizations(HasRegistry, HasFrontEnd, HasGameInfo, HasLanguageHook, HasKeyboard, HasTexture);
+	ApplyMergedLocalizations(HasRegistry, HasFrontEnd, HasGameInfo, HasLanguageHook, HasKeyboard, HasTexture, HasCMR3Font);
 }
 
 void OnInitializeHook()
