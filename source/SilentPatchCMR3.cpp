@@ -1967,6 +1967,18 @@ void CMR3Font_BlitText_CalibrateAxisName(uint8_t a1, const char* text, int16_t /
 	CMR3Font_BlitText_Center(a1, text, 140, posY + 10, color, 0x14);
 }
 
+void CMR3Font_BlitText_SecretsScreenNoAutoSave(uint8_t a1, const char* text, int16_t posX, int16_t posY, uint32_t color, int align)
+{
+	if (posY == 186)
+	{
+		CMR3Font_BlitText_Center(a1, text, posX, posY, color, align);
+	}
+	else
+	{
+		CMR3Font_BlitText(a1, text, posX, posY, color, align);
+	}
+}
+
 namespace ScaledTexturesSupport
 {
 	D3DTexture* CreateTexture_Misc_Scaled_Internal(D3DTexture* result, const char* name)
@@ -4157,6 +4169,9 @@ static void ApplyPatches(const bool HasRegistry)
 			UI_RightAlignElements.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("BF ? ? ? ? 2B F9", 1), 640);
 			UI_RightAlignElements.emplace_back(std::in_place_type<Int32Patch>, get_pattern<int32_t>("BF ? ? ? ? 2B FA 2B F9", 1), 640);
 
+			// Special case this one draw as we have to differentiate between a scroller text, and a normal text
+			auto secrets_noautosave = pattern(secrets_begin.get_uintptr(), secrets_end, "E8 ? ? ? ? 8B 6C 24 1C 8B 45 08").get_first<void>();
+
 			// "Original settings will be restored in X seconds" dialogs
 			// + slot delete
 			void* settings_reset_dialog_backgrounds[] = {
@@ -4354,6 +4369,8 @@ static void ApplyPatches(const bool HasRegistry)
 			{
 				InjectHook(match.get<void>(11), Core_Blitter2D_Line2D_G_Center);
 			});
+
+			InjectHook(secrets_noautosave, CMR3Font_BlitText_SecretsScreenNoAutoSave);
 
 			for (void* addr : settings_reset_dialog_backgrounds)
 			{
