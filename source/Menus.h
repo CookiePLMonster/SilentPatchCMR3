@@ -154,8 +154,6 @@ void PC_GraphicsAdvanced_PopulateFromCaps_NewOptions(MenuDefinition* menu, uint3
 
 void PC_GraphicsAdvanced_Display_NewOptions(MenuDefinition* menu, float interp, uint32_t posY, uint32_t entryID, uint32_t offColor, uint32_t onColor);
 
-void PC_GraphicsAdvanced_DisplayOnOff(MenuDefinition* menu, const char* optionText, const char* offText, const char* onText, uint32_t entryID, int value, uint32_t offColor, uint32_t onColor, float interp, bool displayBoth);
-
 void PC_GraphicsOptions_Display_NewOptions(MenuDefinition* menu, float interp, uint32_t posY, uint32_t entryID, uint32_t offColor, uint32_t onColor);
 void PC_GraphicsOptions_Enter_NewOptions(MenuDefinition* menu, int a2);
 void PC_GraphicsOptions_Exit_NewOptions(MenuDefinition* menu, int a2);

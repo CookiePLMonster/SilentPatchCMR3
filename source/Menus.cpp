@@ -157,10 +157,12 @@ void FrontEndMenuSystem_SetupMenus_Custom(int languagesOnly)
 
 		memcpy(&menu.m_entries[EntryID::GRAPHICS_SPLIT_SCREEN], &menu.m_entries[0], sizeof(menu.m_entries[0]));
 		menu.m_entries[EntryID::GRAPHICS_SPLIT_SCREEN].m_stringID = 353;
+		menu.m_entries[EntryID::GRAPHICS_SPLIT_SCREEN].m_displayBothOnOff = true;
 		menu.m_entries[EntryID::GRAPHICS_SPLIT_SCREEN].m_entryDataString = nullptr;
 
 		memcpy(&menu.m_entries[EntryID::GRAPHICS_TACHO], &menu.m_entries[0], sizeof(menu.m_entries[0]));
 		menu.m_entries[EntryID::GRAPHICS_TACHO].m_stringID = Language::TACHOMETER;
+		menu.m_entries[EntryID::GRAPHICS_TACHO].m_displayBothOnOff = true;
 		menu.m_entries[EntryID::GRAPHICS_TACHO].m_entryDataString = nullptr;
 
 		// Base off Graphics Quality as it's the closest
@@ -435,6 +437,8 @@ void PC_GraphicsAdvanced_PopulateFromCaps_NewOptions(MenuDefinition* menu, uint3
 	}
 }
 
+static void Menus_DisplayOnOff(MenuDefinition* menu, const char* optionText, const char* offText, const char* onText, uint32_t entryID, int value, uint32_t offColor, uint32_t onColor, float interp, bool displayBoth, bool swapColors = false);
+
 void PC_GraphicsAdvanced_Display_NewOptions(MenuDefinition* menu, float interp, uint32_t posY, uint32_t entryID, uint32_t offColor, uint32_t onColor)
 {
 	switch (entryID)
@@ -475,8 +479,8 @@ void PC_GraphicsAdvanced_Display_NewOptions(MenuDefinition* menu, float interp, 
 	case EntryID::GRAPHICS_ADV_VSYNC:
 	{
 		sprintf_s(gszTempString, 512, "%s: ", Language_GetString(Language::VSYNC));
-		PC_GraphicsAdvanced_DisplayOnOff(menu, gszTempString, Language_GetString(85), Language_GetString(84), posY, menu->m_entries[EntryID::GRAPHICS_ADV_VSYNC].m_value,
-			offColor, onColor, interp, menu->m_entries[EntryID::GRAPHICS_ADV_VSYNC].m_displayBothOnOff != 0);
+		Menus_DisplayOnOff(menu, gszTempString, Language_GetString(85), Language_GetString(84), posY, menu->m_entries[EntryID::GRAPHICS_ADV_VSYNC].m_value,
+			offColor, onColor, interp, menu->m_entries[EntryID::GRAPHICS_ADV_VSYNC].m_displayBothOnOff != 0, true);
 		break;
 	}
 	case EntryID::GRAPHICS_ADV_ANISOTROPIC:
@@ -506,10 +510,10 @@ void PC_GraphicsAdvanced_Display_NewOptions(MenuDefinition* menu, float interp, 
 	}
 }
 
-void PC_GraphicsAdvanced_DisplayOnOff(MenuDefinition* /*menu*/, const char* optionText, const char* offText, const char* onText, uint32_t posY, int value, uint32_t offColor, uint32_t onColor, float interp, bool displayBoth)
+static void Menus_DisplayOnOff(MenuDefinition* /*menu*/, const char* optionText, const char* offText, const char* onText, uint32_t posY, int value, uint32_t offColor, uint32_t onColor, float interp, bool displayBoth, bool swapColors)
 {
 	int currentPosX = CMR3Font_GetTextWidth(0, optionText) + 393;
-	if (value == 0)
+	if (swapColors && value == 0)
 	{
 		std::swap(offColor, onColor);
 	}
@@ -531,35 +535,20 @@ void PC_GraphicsAdvanced_DisplayOnOff(MenuDefinition* /*menu*/, const char* opti
 
 void PC_GraphicsOptions_Display_NewOptions(MenuDefinition* menu, float interp, uint32_t posY, uint32_t entryID, uint32_t offColor, uint32_t onColor)
 {
-	const uint8_t interpValue = static_cast<uint8_t>(interp * interp * 255.0f);
 	switch (entryID)
 	{
 	case EntryID::GRAPHICS_SPLIT_SCREEN:
 	{
 		sprintf_s(gszTempString, 512, "%s: ", Language_GetString(menu->m_entries[entryID].m_stringID));
-		const int splitScreenTextLength = CMR3Font_GetTextWidth(0, gszTempString);
-
-		char buf[512];
-		const char* horizontalText = Language_GetString(269);
-		sprintf_s(buf, "%s ", horizontalText);
-		const int horizontalTextLength = CMR3Font_GetTextWidth(0, buf);
-		CMR3Font_BlitText_RightAlign(0, buf, static_cast<int16_t>(splitScreenTextLength + 393), static_cast<int16_t>(posY), HandyFunction_AlphaCombineFlat(offColor, interpValue), 9);
-
-		CMR3Font_BlitText_RightAlign(0, Language_GetString(270), static_cast<int16_t>(splitScreenTextLength + horizontalTextLength + 393), static_cast<int16_t>(posY), HandyFunction_AlphaCombineFlat(onColor, interpValue), 9);
+		Menus_DisplayOnOff(menu, gszTempString, Language_GetString(269), Language_GetString(270), posY, menu->m_entries[entryID].m_value,
+			offColor, onColor, interp, menu->m_entries[entryID].m_displayBothOnOff != 0);
 		break;
 	}
 	case EntryID::GRAPHICS_TACHO:
 	{
 		sprintf_s(gszTempString, 512, "%s: ", Language_GetString(menu->m_entries[entryID].m_stringID));
-		const int splitScreenTextLength = CMR3Font_GetTextWidth(0, gszTempString);
-
-		char buf[512];
-		const char* horizontalText = Language_GetString(884);
-		sprintf_s(buf, "%s ", horizontalText);
-		const int horizontalTextLength = CMR3Font_GetTextWidth(0, buf);
-		CMR3Font_BlitText_RightAlign(0, buf, static_cast<int16_t>(splitScreenTextLength + 393), static_cast<int16_t>(posY), HandyFunction_AlphaCombineFlat(offColor, interpValue), 9);
-
-		CMR3Font_BlitText_RightAlign(0, Language_GetString(883), static_cast<int16_t>(splitScreenTextLength + horizontalTextLength + 393), static_cast<int16_t>(posY), HandyFunction_AlphaCombineFlat(onColor, interpValue), 9);
+		Menus_DisplayOnOff(menu, gszTempString, Language_GetString(884), Language_GetString(883), posY, menu->m_entries[entryID].m_value,
+			offColor, onColor, interp, menu->m_entries[entryID].m_displayBothOnOff != 0);
 		break;
 	}
 	case EntryID::GRAPHICS_EXTERIOR_FOV:
