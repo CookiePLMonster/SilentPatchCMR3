@@ -4911,6 +4911,21 @@ static void ApplyPatches(const bool HasRegistry)
 	TXN_CATCH();
 
 
+	// Remapped menu navigation from analog sticks to DPad
+	if ((HasRegistry && Registry::GetRegistryDword(Registry::ADVANCED_SECTION_NAME, Registry::ANALOG_MENU_NAV_SKY_NAME).value_or(0) == 0) || !HasRegistry) try
+	{
+		auto axis_type_analog = pattern("83 F8 01 75 09 83 FD FF 75 10").get_one();
+
+		// DPad is an axis type 8
+		Patch<int8_t>(axis_type_analog.get<void>(2), 8);
+
+		// Instead of taking the first axis type 1 and the first axis type 2, take the first and second axis type 8
+		// jnz loc_4439A6 -> jnz loc_44399F
+		Patch<int8_t>(axis_type_analog.get<void>(8 + 1), 9);
+	}
+	TXN_CATCH();
+
+
 	// Additional Advanced Graphics options
 	// Windowed Mode, VSync, Anisotropic Filtering, Refresh Rate
 	// Requires patches: Registry (for saving/loading), Core D3D (for resizing windows), Graphics, RenderState (for AF)
