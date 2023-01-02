@@ -2448,6 +2448,8 @@ namespace NewAdvancedGraphicsOptions
 			*outWindow = window;
 			if (window != nullptr)
 			{
+				// Spam a WM_TIMER message every 2 seconds just to keep the message pump alive, as else the game has a habit of entering a "hung" state
+				SetTimer(window, reinterpret_cast<UINT_PTR>(&CreateClassAndWindow), 2000, nullptr);
 				SetFocus(window);
 				Destruct_AddDestructor(Destruct_GetCoreDestructorGroup(), Main_WindowDestructor);
 				return TRUE;
