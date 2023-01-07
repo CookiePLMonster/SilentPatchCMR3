@@ -8,6 +8,7 @@ namespace Version
 	static constexpr const uint64_t VERSION_POLISH_DRMFREE = 0x421CEBFA0058C000u;
 	static constexpr const uint64_t VERSION_CZECH_DRMFREE = 0x413488EA0058D000u;
 
+	static constexpr const uint64_t VERSION_EFIGS_10 = 0x3EC122FE00688000u; // Unsupported
 	static constexpr const uint64_t VERSION_EFIGS_11 = 0x3F200A7F00696000u; // Unsupported
 	static constexpr const uint64_t VERSION_POLISH_11 = 0x3FBCF1F900594000u; // Unsupported
 

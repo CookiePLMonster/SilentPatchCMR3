@@ -1072,6 +1072,9 @@ namespace SPText
 		case Version::VERSION_CZECH_DRMFREE:
 			text.append("1.1 Czech DRM-free");
 			break;
+		case Version::VERSION_EFIGS_10:
+			text.append("1.0 International");
+			break;
 		case Version::VERSION_EFIGS_11:
 			text.append("1.1 International");
 			break;
