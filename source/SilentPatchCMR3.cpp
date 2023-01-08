@@ -757,6 +757,54 @@ namespace OcclusionQueries
 	}
 }
 
+namespace CzechResultsScreen
+{
+	static int16_t savedPosY;
+	
+	static void (*orgHandyFunction_DrawClipped2DBox)(int posX, int posY, int width, int height, unsigned int color, int clipX, int clipY, int clipWidth, int clipHeight, int fill);
+	static void HandyFunction_DrawClipped2DBox_SaveY(int posX, int posY, int width, int height, unsigned int color, int clipX, int clipY, int clipWidth, int clipHeight, int fill)
+	{
+		savedPosY = static_cast<int16_t>(posY - 107);
+		orgHandyFunction_DrawClipped2DBox(posX, posY, width, height, color, clipX, clipY, clipWidth, clipHeight, fill);
+	}
+
+	template<std::size_t Index>
+	static void (*orgCMR3Font_BlitText_SavedPos)(uint8_t fontID, const char* text, int16_t posX, int16_t posY, uint32_t color, int align);
+	
+	template<std::size_t Index>
+	static void CMR3Font_BlitText_SavedPos(uint8_t fontID, const char* text, int16_t posX, int16_t posY, uint32_t color, int align)
+	{
+		if constexpr (Index == 0)
+		{
+			// posY is a loop index
+			orgCMR3Font_BlitText_SavedPos<Index>(fontID, text, posX, 50 + posY * 44, color, align);
+		}
+		else if constexpr (Index == 1)
+		{
+			// posY is correct, just offset
+			orgCMR3Font_BlitText_SavedPos<Index>(fontID, text, posX, posY - 107 - 18, color, align);
+		}
+		else
+		{
+			// posY is totally wrong
+			orgCMR3Font_BlitText_SavedPos<Index>(fontID, text, posX, savedPosY, color, align);
+		}
+	}
+
+	template<std::size_t Ctr, typename Tuple, std::size_t... I, typename Func>
+	void HookEachImpl(Tuple&& tuple, std::index_sequence<I...>, Func&& f)
+	{
+		(f(std::get<I>(tuple), orgCMR3Font_BlitText_SavedPos<Ctr << 16 | I>, CMR3Font_BlitText_SavedPos<Ctr << 16 | I>), ...);
+	}
+
+	template<std::size_t Ctr = 0, typename Vars, typename Func>
+	void HookEach(Vars&& vars, Func&& f)
+	{
+		auto tuple = std::tuple_cat(std::forward<Vars>(vars));
+		HookEachImpl<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
+	}
+}
+
 namespace QuitMessageFix
 {
 	static uint32_t* gboExitProgram;
@@ -4751,6 +4799,36 @@ static void ApplyPatches(const bool HasRegistry)
 	{
 		auto retired_text = get_pattern("E8 ? ? ? ? 6A 00 53 E8 ? ? ? ? 5E");
 		InjectHook(retired_text, CMR3Font_BlitText_RetiredFromRace);
+	}
+	TXN_CATCH();
+
+
+	// Fixed split-screen time trials
+	// Happens in the Czech EXE only, so these patterns are meant to fail with other versions
+	try
+	{
+		using namespace CzechResultsScreen;
+		
+		// Special Stage Time Trial
+		auto draw_clipped_box_save_y = get_pattern("E8 ? ? ? ? 3B 6C 24 ? 7D ? 8D 55 01");
+
+		// Keep the ordering as-is!
+		std::array<void*, 6> blit_texts_to_patch = {
+			// Time Trial
+			get_pattern("8B 4C 24 ? 83 C4 0C 6A 0C 53 51 6A ? 68 ? ? ? ? 6A 0C E8", 0x14),
+
+			// Super Special Stage Time Trial
+			get_pattern("E8 ? ? ? ? 8B 0E 41"), // Special cased
+
+			get_pattern("E8 ? ? ? ? 8B 16 6A FF"),
+			get_pattern("6A 00 E8 ? ? ? ? E8 ? ? ? ? 85 C0 74 1D", 2),
+			get_pattern("E8 ? ? ? ? 8B 46 08 8B 4E 0C"),
+			get_pattern("E8 ? ? ? ? 45 83 C6 18"),
+		};
+
+		HookEach(blit_texts_to_patch, InterceptCall);
+
+		InterceptCall(draw_clipped_box_save_y, orgHandyFunction_DrawClipped2DBox, HandyFunction_DrawClipped2DBox_SaveY);
 	}
 	TXN_CATCH();
 
