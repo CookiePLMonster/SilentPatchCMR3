@@ -2108,6 +2108,13 @@ void CMR3Font_BlitText_CalibrateAxisName(uint8_t a1, const char* text, int16_t /
 	CMR3Font_BlitText_Center(a1, text, 140, posY + 10, color, 0x14);
 }
 
+void CMR3Font_BlitText_RetiredFromRace(uint8_t a1, const char* text, int16_t posX, int16_t posY, uint32_t color, int align)
+{
+	const int32_t scaledPosX = posX * static_cast<int32_t>(GetScaledResolutionWidth());
+	const int32_t scaledPosY = posY * 480;
+	CMR3Font_BlitText(a1, text, static_cast<int16_t>(scaledPosX / Graphics_GetScreenWidth()), static_cast<int16_t>(scaledPosY / Graphics_GetScreenHeight()), color, align);
+}
+
 void CMR3Font_BlitText_SecretsScreenNoAutoSave(uint8_t a1, const char* text, int16_t posX, int16_t posY, uint32_t color, int align)
 {
 	if (posY == 186)
@@ -4735,6 +4742,15 @@ static void ApplyPatches(const bool HasRegistry)
 		}
 		Graphics::Patches::UI_CenteredElements.shrink_to_fit();
 		Graphics::Patches::UI_RightAlignElements.shrink_to_fit();
+	}
+	TXN_CATCH();
+
+
+	// Fixed "Player X has retired from race" drawing with incorrectly scaled coordinates
+	if (HasCMR3Font && HasGraphics) try
+	{
+		auto retired_text = get_pattern("E8 ? ? ? ? 6A 00 53 E8 ? ? ? ? 5E");
+		InjectHook(retired_text, CMR3Font_BlitText_RetiredFromRace);
 	}
 	TXN_CATCH();
 
