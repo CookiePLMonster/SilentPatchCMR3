@@ -4833,6 +4833,18 @@ static void ApplyPatches(const bool HasRegistry)
 	TXN_CATCH();
 
 
+	// Fixed dial_002 cutting off by one pixel
+	try
+	{
+		auto info_box_width = get_pattern("81 CE FF FF FF 00 56 6A 40 6A 40", 9+1);
+		auto info_box_u2 = get_pattern("6A 40 6A 40 6A 00 6A 00 50", 2+1);
+
+		Patch<int8_t>(info_box_width, 65);
+		Patch<int8_t>(info_box_u2, 65);
+	}
+	TXN_CATCH();
+
+
 	// Re-enabled Alt+F4
 	try
 	{
