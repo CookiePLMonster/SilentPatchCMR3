@@ -259,6 +259,23 @@ static OSD_Data2 OSDPositionsMulti_Original[4];
 static Object_StartLight Object_StartLightOriginal[2];
 void OSD_Main_SetUpStructsForWidescreen()
 {
+	// Fix broken UI elements first
+
+	// Split times width for vertical splitscreen
+	orgOSDPositions[2].m_nCertinaBoxWidth = orgOSDPositions[0].m_nCertinaBoxWidth;
+	orgOSDPositions[3].m_nCertinaBoxWidth = orgOSDPositions[1].m_nCertinaBoxWidth;
+
+	// Misplaced LEDs
+
+	// 1p, analog tachometer, both LEDs misplaced
+	for (size_t i = 0; i < 2; i++)
+	{
+		orgOSDPositions[i].m_nLEDOffsetX -= 1;
+
+		orgOSDPositions[i].m_nLEDOffsetY += 1;
+		orgOSDPositions[i].m_nGearOffsetY += 1;
+	}
+
 	memcpy(OSDPositions_Original, orgOSDPositions, sizeof(OSDPositions_Original));
 	memcpy(OSDPositionsMulti_Original, orgOSDPositionsMulti, sizeof(OSDPositionsMulti_Original));
 	memcpy(Object_StartLightOriginal, orgStartLightData, sizeof(Object_StartLightOriginal));
