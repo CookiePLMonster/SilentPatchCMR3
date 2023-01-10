@@ -386,8 +386,8 @@ void Viewport_SetDimensions(D3DViewport* viewport, int left, int top, int right,
 
 	viewport->m_left = left;
 	viewport->m_top = top;
-	viewport->m_right = right;
-	viewport->m_bottom = bottom;
+	viewport->m_width = right;
+	viewport->m_height = bottom;
 	viewport->m_horFov = (4.0f * bottom) / (3.0f * right);
 	viewport->m_leftScale = static_cast<float>(left) / ResWidth;
 	viewport->m_topScale = static_cast<float>(top) / ResHeight;

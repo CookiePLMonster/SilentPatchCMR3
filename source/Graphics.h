@@ -64,8 +64,8 @@ struct D3DViewport
 	int field_8;
 	int m_left;
 	int m_top;
-	int m_right;
-	int m_bottom;
+	int m_width;
+	int m_height;
 	float m_horFov;
 	float m_vertFov;
 	int field_24;

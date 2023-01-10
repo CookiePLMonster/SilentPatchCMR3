@@ -1461,7 +1461,7 @@ namespace HalfPixel
 		const float c1 = (XMVectorGetX(XMVector3Dot(ppcam0, column0)) + proj.m[3][0]) * l1;
 		const float l2 = 1.0f / (XMVectorGetX(XMVector3Dot(ppcam1, column3)) + proj.m[3][3]);
 		const float c2 = (XMVectorGetX(XMVector3Dot(ppcam1, column0)) + proj.m[3][0]) * l2;
-		return 1.0f / ((c2 - c1) * Graphics_GetScreenWidth());
+		return 1.0f / ((c2 - c1) * Viewport_GetCurrent()->m_width);
 	}
 
 	// This and the above functions have been adapted for the game from "Textured Lines In D3D" by Pierre Terdiman
@@ -1649,7 +1649,7 @@ namespace HalfPixel
 			using namespace DirectX;
 
 			const XMMATRIX identityMatrix = XMMatrixIdentity();
-			const float targetThickness = Graphics_GetScreenHeight() / 480.0f;
+			const float targetThickness = Viewport_GetCurrent()->m_height / 480.0f;
 
 			BlitTri2D_G* tris = reinterpret_cast<BlitTri2D_G*>(buf);
 			BlitTri2D_G* currentTri = tris;
@@ -4072,8 +4072,8 @@ static void ApplyPatches(const bool HasRegistry)
 
 
 	// Fixed half pixel issues, and added line thickness
-	// Requires patches: Graphics (for resolution)
-	if (HasGraphics) try
+	// Requires patches: Graphics (for resolution), Viewport (for line thickness)
+	if (HasGraphics && HasViewport) try
 	{
 		using namespace HalfPixel;
 
