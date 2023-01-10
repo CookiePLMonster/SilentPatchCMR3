@@ -2191,7 +2191,7 @@ namespace ScaledTexturesSupport
 				{ "Arrow1Player", { 32, 16 } },
 				{ "ArrowMultiPlayer", { 32, 16 } },
 				{ "ArrowSmall", { 16, 16 } },
-				{ "Base", { 128, 128, true } },
+				{ "Base", { 128, 128 } },
 				{ "certina", { 64, 8 } },
 				{ "Colour", { 128, 128, true } },
 				{ "Ck_base", { 128, 64 } },
