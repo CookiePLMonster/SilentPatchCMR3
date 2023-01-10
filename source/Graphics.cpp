@@ -231,14 +231,8 @@ void Graphics_Viewports_SetAspectRatios()
 		Viewport_SetAspectRatio(gViewports[2], TargetAR * InvARSplit, TargetAR * 2.0f);
 	}
 
-	// Vertical splitscreen - left
-	{
-		const float WidthSplit = Width - 50.0f;
-		const float InvARSplit = Height / WidthSplit;
-		Viewport_SetAspectRatio(gViewports[3], TargetAR * InvARSplit * 2.0f, TargetAR);
-	}
-
-	// Vertical splitscreen - right
+	// Vertical splitscreen - left, right
+	Viewport_SetAspectRatio(gViewports[3], TargetAR * InvAR * 2.0f, TargetAR);
 	Viewport_SetAspectRatio(gViewports[4], TargetAR * InvAR * 2.0f, TargetAR);
 
 	// 4p splitscreen - top left, top right
