@@ -1531,7 +1531,9 @@ namespace HalfPixel
 				val = OffsetTexel(val);
 			}
 		}
+		(*gpd3dDevice)->SetRenderState(D3DRS_MULTISAMPLEANTIALIAS, FALSE);
 		Core_Blitter2D_Rect2D_G_Original(verts, numVerts);
+		(*gpd3dDevice)->SetRenderState(D3DRS_MULTISAMPLEANTIALIAS, TRUE);
 	}
 
 	static void* Core_Blitter2D_Rect2D_GT_JumpBack;
@@ -1559,7 +1561,9 @@ namespace HalfPixel
 				val = OffsetTexel(val);
 			}
 		}
+		(*gpd3dDevice)->SetRenderState(D3DRS_MULTISAMPLEANTIALIAS, FALSE);
 		Core_Blitter2D_Rect2D_GT_Original(verts, numRectangles);
+		(*gpd3dDevice)->SetRenderState(D3DRS_MULTISAMPLEANTIALIAS, TRUE);
 	}
 
 	static void* Core_Blitter2D_Quad2D_G_JumpBack;
@@ -4072,8 +4076,8 @@ static void ApplyPatches(const bool HasRegistry)
 
 
 	// Fixed half pixel issues, and added line thickness
-	// Requires patches: Graphics (for resolution), Viewport (for line thickness)
-	if (HasGraphics && HasViewport) try
+	// Requires patches: Graphics (for resolution), Viewport (for line thickness), Core D3D (for rectangle MSAA)
+	if (HasGraphics && HasViewport && HasCored3d) try
 	{
 		using namespace HalfPixel;
 
