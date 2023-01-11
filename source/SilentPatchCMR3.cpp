@@ -2527,6 +2527,7 @@ namespace NewAdvancedGraphicsOptions
 	}
 	static const auto pSetWindowLongA_NOP = &SetWindowLongA_NOP;
 
+	static int savedWidth, savedHeight;
 	BOOL WINAPI SetWindowPos_Adjust(HWND hWnd, HWND hWndInsertAfter, int X, int Y, int cx, int cy, UINT uFlags)
 	{
 		ResizingViaSetWindowPos = true;
@@ -2543,9 +2544,10 @@ namespace NewAdvancedGraphicsOptions
 		GetDesiredWindowStyle(displayMode, dwStyle, dwExStyle);
 		AdjustWindowRectEx(&rect, dwStyle, FALSE, dwExStyle);
 
+		savedWidth = rect.right - rect.left;
+		savedHeight = rect.bottom - rect.top;
 		SetWindowLongPtr(hWnd, GWL_STYLE, dwStyle);
-		BOOL result = SetWindowPos(hWnd, hWndInsertAfter, rect.left, rect.top, rect.right - rect.left, rect.bottom - rect.top, 
-			uFlags|SWP_FRAMECHANGED);
+		BOOL result = SetWindowPos(hWnd, hWndInsertAfter, rect.left, rect.top, 0, 0, uFlags|SWP_FRAMECHANGED|SWP_NOSIZE); // Only style and move here, resize later
 
 		SendMessage(hWnd, WM_SETICON, ICON_SMALL, reinterpret_cast<LPARAM>(SmallIcon));
 
@@ -2586,6 +2588,15 @@ namespace NewAdvancedGraphicsOptions
 		RenderState_InitialiseFallbackFilters(config->m_adapter);
 	}
 
+	void AfterChangeResizeWindowAgain(const Graphics_Config* config)
+	{
+		if (config->m_windowed != 0)
+		{
+			// Resize the window again after device reset
+			SetWindowPos(*ghWindow, nullptr, 0, 0, savedWidth, savedHeight, SWP_NOMOVE|SWP_NOZORDER|SWP_NOREDRAW|SWP_NOACTIVATE);
+		}
+	}
+
 	template<std::size_t Index>
 	uint32_t (*orgGraphics_Change)(Graphics_Config*);
 
@@ -2593,7 +2604,9 @@ namespace NewAdvancedGraphicsOptions
 	uint32_t Graphics_Change_ResizeWindow(Graphics_Config* config)
 	{
 		ResizeWindowAndUpdateConfig(config);
-		return orgGraphics_Change<Index>(config);
+		const uint32_t result = orgGraphics_Change<Index>(config);
+		AfterChangeResizeWindowAgain(config);
+		return result;
 	}
 
 	template<std::size_t Ctr, typename Tuple, std::size_t... I, typename Func>
