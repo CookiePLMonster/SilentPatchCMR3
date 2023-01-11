@@ -2738,6 +2738,36 @@ namespace NewAdvancedGraphicsOptions
 	{
 		return D3DTEXF_ANISOTROPIC;
 	}
+
+	static void UpdatePresentationParameters_Internal(const Graphics_Config* config)
+	{
+		gd3dPP->PresentationInterval = config->m_presentationInterval;
+	}
+
+	// Fake name, as different functions are being patched with the same wrapper
+	template<std::size_t Index>
+	void (*orgUpdatePresentationParameters)(const Graphics_Config*);
+
+	template<std::size_t Index>
+	void UpdatePresentationParameters_Hook(const Graphics_Config* config)
+	{
+		orgUpdatePresentationParameters<Index>(config);
+		UpdatePresentationParameters_Internal(config);
+	}
+
+	template<std::size_t Ctr, typename Tuple, std::size_t... I, typename Func>
+	void HookEachImpl_UpdatePresentationParameters(Tuple&& tuple, std::index_sequence<I...>, Func&& f)
+	{
+		(f(std::get<I>(tuple), orgUpdatePresentationParameters<Ctr << 16 | I>, UpdatePresentationParameters_Hook<Ctr << 16 | I>), ...);
+	}
+
+	template<std::size_t Ctr = 0, typename Vars, typename Func>
+	void HookEach_UpdatePresentationParameters(Vars&& vars, Func&& f)
+	{
+		auto tuple = std::tuple_cat(std::forward<Vars>(vars));
+		HookEachImpl_UpdatePresentationParameters<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
+	}
+
 }
 
 uint32_t CMR_GetNumRefreshRates(const MenuResolutionEntry* entry)
@@ -5081,6 +5111,11 @@ static void ApplyPatches(const bool HasRegistry)
 
 			auto get_num_modes = get_pattern("55 E8 ? ? ? ? 33 C9 3B C1 89 44 24", 1);
 
+			std::array<void*, 2> update_presentation_parameters = {
+				get_pattern("FF 15 ? ? ? ? 68 ? ? ? ? E8 ? ? ? ? E8 ? ? ? ? 3B C3 0F 85", 11),
+				get_pattern("E8 ? ? ? ? 8B 15 ? ? ? ? A1 ? ? ? ? 8B 0D"),
+			};
+
 			ghInstance = *get_pattern<HINSTANCE*>("89 3D ? ? ? ? 89 44 24 14", 2);
 
 			Patch(nop_adjust_windowrect, &pAdjustWindowRectEx_NOP);
@@ -5112,6 +5147,8 @@ static void ApplyPatches(const bool HasRegistry)
 			InterceptCall(render_game_common1_set_af, orgMarkProfiler, MarkProfiler_SetAF);
 			InjectHook(get_filtering_method_for_3d, GetAnisotropicFilter, PATCH_JUMP);
 			InterceptCall(set_mip_bias_and_anisotropic, orgSetMipBias, Texture_SetMipBiasAndAnisotropic);
+
+			HookEach_UpdatePresentationParameters(update_presentation_parameters, InterceptCall);
 
 			HasPatches_AdvancedGraphics = true;
 		}
