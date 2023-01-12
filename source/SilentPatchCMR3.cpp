@@ -37,8 +37,13 @@
 
 #pragma comment(lib, "winmm.lib")
 
-static int DesktopWidth, DesktopHeight;
+static std::vector<RECT> DesktopRects;
 static HICON SmallIcon;
+
+static const RECT& GetAdapterRect(int adapter)
+{
+	return static_cast<size_t>(adapter) < DesktopRects.size() ? DesktopRects[adapter] : DesktopRects.front();
+}
 
 template<typename AT>
 HMODULE GetModuleHandleFromAddress(AT address)
@@ -2529,6 +2534,15 @@ namespace NewAdvancedGraphicsOptions
 		*ghInstance = hInstance;
 		orgWndProc = wndProc;
 
+		const int32_t Adapter = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"ADAPTER").value_or(0);
+		const RECT& adapterRect = GetAdapterRect(Adapter);
+
+		// Add a "missing" rect offset
+		rect.left += adapterRect.left;
+		rect.right += adapterRect.left;
+		rect.top += adapterRect.top;
+		rect.bottom += adapterRect.top;
+
 		WNDCLASSEXA wndClass { sizeof(wndClass) };
 		wndClass.lpfnWndProc = CustomWndProc;
 		wndClass.hInstance = hInstance;
@@ -2564,9 +2578,8 @@ namespace NewAdvancedGraphicsOptions
 			}
 			else
 			{
-				const int cxScreen = DesktopWidth;
-				const int cyScreen = DesktopHeight;
-				window = CreateWindowExA(dwExStyle, lpClassName, windowName, dwStyle, 0, 0, cxScreen, cyScreen, nullptr, nullptr, hInstance, nullptr);
+				window = CreateWindowExA(dwExStyle, lpClassName, windowName, dwStyle, adapterRect.left, adapterRect.top,
+					adapterRect.right - adapterRect.left, adapterRect.bottom - adapterRect.top, nullptr, nullptr, hInstance, nullptr);
 			}
 			*outWindow = window;
 			if (window != nullptr)
@@ -2621,21 +2634,22 @@ namespace NewAdvancedGraphicsOptions
 	{
 		if (config->m_windowed != 0)
 		{
+			const RECT& desktopRect = GetAdapterRect(config->m_adapter);
+
 			RECT& rect = config->m_windowRect;
+			const LONG width = desktopRect.right - desktopRect.left;
+			const LONG height = desktopRect.bottom - desktopRect.top;
 			if (config->m_borderless == 0)
 			{		
-				rect.left = (DesktopWidth - config->m_resWidth) / 2;
+				rect.left = desktopRect.left + ((width - config->m_resWidth) / 2);
 				rect.right = rect.left + config->m_resWidth;
-				rect.top = (DesktopHeight - config->m_resHeight) / 2;
+				rect.top = desktopRect.top + ((height - config->m_resHeight) / 2);
 				rect.bottom = rect.top + config->m_resHeight;
 			}
 			else
 			{
 				// When resizing to borderless, span the entire desktop
-				rect.left = 0;
-				rect.right = DesktopWidth;
-				rect.top = 0;
-				rect.bottom = DesktopHeight;
+				rect = desktopRect;
 			}
 
 			// Force the game to resize the window
@@ -2849,6 +2863,17 @@ namespace NewAdvancedGraphicsOptions
 		HookEachImpl_UpdatePresentationParameters<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
 	}
 
+	int WINAPI GetSystemMetrics_Desktop(int nIndex)
+	{
+		if (nIndex == SM_CXSCREEN || nIndex == SM_CYSCREEN)
+		{
+			const int32_t Adapter = Registry::GetRegistryDword(Registry::REGISTRY_SECTION_NAME, L"ADAPTER").value_or(0);
+			const RECT& adapterRect = GetAdapterRect(Adapter);
+			return nIndex == SM_CYSCREEN ? adapterRect.bottom - adapterRect.top : adapterRect.right - adapterRect.left;
+		}
+		return ::GetSystemMetrics(nIndex);
+	}
+	static const auto pGetSystemMetrics_Desktop = &GetSystemMetrics_Desktop;
 }
 
 uint32_t CMR_GetNumRefreshRates(const MenuResolutionEntry* entry)
@@ -3601,8 +3626,8 @@ static void ApplyPatches(const bool HasRegistry)
 	using namespace Memory;
 	using namespace hook::txn;
 
-	DesktopWidth = GetSystemMetrics(SM_CXSCREEN);
-	DesktopHeight = GetSystemMetrics(SM_CYSCREEN);
+	// This may be overwritten later
+	DesktopRects.push_back({ 0, 0, GetSystemMetrics(SM_CXSCREEN), GetSystemMetrics(SM_CYSCREEN) });
 
 	const HINSTANCE mainModuleInstance = GetModuleHandle(nullptr);
 
@@ -5230,6 +5255,8 @@ static void ApplyPatches(const bool HasRegistry)
 				get_pattern("E8 ? ? ? ? 8B 15 ? ? ? ? A1 ? ? ? ? 8B 0D"),
 			};
 
+			auto get_system_metrics = get_pattern("8B 2D ? ? ? ? 6A 00", 2);
+
 			ghInstance = *get_pattern<HINSTANCE*>("89 3D ? ? ? ? 89 44 24 14", 2);
 
 			Patch(nop_adjust_windowrect, &pAdjustWindowRectEx_NOP);
@@ -5263,6 +5290,16 @@ static void ApplyPatches(const bool HasRegistry)
 			InterceptCall(set_mip_bias_and_anisotropic, orgSetMipBias, Texture_SetMipBiasAndAnisotropic);
 
 			HookEach_UpdatePresentationParameters(update_presentation_parameters, InterceptCall);
+
+			// Re-populate all displays
+			Patch(get_system_metrics, &pGetSystemMetrics_Desktop);
+
+			DesktopRects.clear();
+			EnumDisplayMonitors(nullptr, nullptr, [](HMONITOR, HDC, LPRECT lpRect, LPARAM) -> BOOL
+				{
+					DesktopRects.emplace_back(*lpRect);
+					return TRUE;
+				}, 0);
 
 			HasPatches_AdvancedGraphics = true;
 		}
