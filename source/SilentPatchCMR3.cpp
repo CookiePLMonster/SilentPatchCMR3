@@ -1076,6 +1076,64 @@ namespace UnrandomizeUnknownCodepoints
 	}
 }
 
+namespace ConditionalZWrite
+{
+	static bool DisableZWrite = false;
+
+	void (*orgGraphics_Shadows_Soften)(int a1);
+	void Graphics_Shadows_Soften_DisableDepth(int a1)
+	{
+#ifndef NDEBUG
+		static bool softencmr2005 = false;
+		static bool keyPressed = false;
+		if (GetAsyncKeyState(VK_F4) & 0x8000)
+		{
+			if (!keyPressed)
+			{
+				softencmr2005 = !softencmr2005;
+				keyPressed = true;
+			}
+		}
+		else
+		{
+			keyPressed = false;
+		}
+#else
+		constexpr bool softencmr2005 = false;
+#endif
+
+		DisableZWrite = true;
+		orgGraphics_Shadows_Soften(softencmr2005 ? 2 : a1);
+		DisableZWrite = false;
+	}
+
+	template<std::size_t Index>
+	int (*orgRenderState_SetZBufferMode)(int enable);
+
+	template<std::size_t Index>
+	int RenderState_SetZBufferMode_Conditional(int enable)
+	{
+		if (DisableZWrite)
+		{
+			return 0;
+		}
+		return orgRenderState_SetZBufferMode<Index>(enable);
+	}
+
+	template<std::size_t Ctr, typename Tuple, std::size_t... I, typename Func>
+	void HookEachImpl_ConditionalSet(Tuple&& tuple, std::index_sequence<I...>, Func&& f)
+	{
+		(f(std::get<I>(tuple), orgRenderState_SetZBufferMode<Ctr << 16 | I>, RenderState_SetZBufferMode_Conditional<Ctr << 16 | I>), ...);
+	}
+
+	template<std::size_t Ctr = 0, typename Vars, typename Func>
+	void HookEach_ConditionalSet(Vars&& vars, Func&& f)
+	{
+		auto tuple = std::tuple_cat(std::forward<Vars>(vars));
+		HookEachImpl_ConditionalSet<Ctr>(std::move(tuple), std::make_index_sequence<std::tuple_size_v<decltype(tuple)>>{}, std::forward<Func>(f));
+	}
+}
+
 namespace FileErrorMessages
 {
 	static void (*orgGraphics_Render)();
@@ -5012,6 +5070,39 @@ static void ApplyPatches(const bool HasRegistry)
 		auto graphics_render = get_pattern("E8 ? ? ? ? E8 ? ? ? ? EB BB", 5);
 
 		InterceptCall(graphics_render, orgGraphics_Render, Graphics_Render_PumpMessages);
+	}
+	TXN_CATCH();
+
+
+	// Disable forced Z test in Quad2D_GT and Line2D_G functions (on demand)
+	// to fix broken car shadow soften pass with MSAA enabled
+	try
+	{
+		using namespace ConditionalZWrite;
+
+		auto blitter2d_set = pattern("FF ? 30 6A 01 E8 ? ? ? ? 6A 01 8B F0").count(7);
+		auto blitter2d_unset = pattern("56 89 2D ? ? ? ? E8 ? ? ? ? 57 E8").count(6); // All except for Line2D
+		auto blitter2d_unset_line2d = get_pattern("FF 91 ? ? ? ? 56 E8 ? ? ? ? 53", 7);
+
+		auto graphics_shadow_soften = pattern("6A 08 E8 ? ? ? ? 8B 4C 24 1C").get_one();
+
+		std::array<void*, 14> zbuffer_modes = {
+			blitter2d_set.get(0).get<void>(5), blitter2d_set.get(1).get<void>(5), blitter2d_set.get(2).get<void>(5),
+			blitter2d_set.get(3).get<void>(5), blitter2d_set.get(4).get<void>(5), blitter2d_set.get(5).get<void>(5),
+			blitter2d_set.get(6).get<void>(5),
+
+			blitter2d_unset.get(0).get<void>(7), blitter2d_unset.get(1).get<void>(7), blitter2d_unset.get(2).get<void>(7),
+			blitter2d_unset.get(3).get<void>(7), blitter2d_unset.get(4).get<void>(7), blitter2d_unset.get(5).get<void>(7),
+
+			blitter2d_unset_line2d
+		};
+
+		HookEach_ConditionalSet(zbuffer_modes, InterceptCall);
+
+		InterceptCall(graphics_shadow_soften.get<void>(2), orgGraphics_Shadows_Soften, Graphics_Shadows_Soften_DisableDepth);
+
+		// Reduce soften passes from 8 to 2, like in CMR2005
+		//Patch<int8_t>(graphics_shadow_soften.get<void>(1), 2);
 	}
 	TXN_CATCH();
 
