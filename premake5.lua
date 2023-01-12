@@ -12,7 +12,7 @@ project "SilentPatchCMR3"
 
 
 workspace "*"
-	configurations { "Debug", "Release", "Master" }
+	configurations { "Debug", "Release", "Shipping" }
 	location "build"
 
 	vpaths { ["Headers/*"] = "source/**.h",
@@ -38,9 +38,9 @@ filter "configurations:Debug"
 	defines { "DEBUG" }
 	runtime "Debug"
 
- filter "configurations:Master"
+ filter "configurations:Shipping"
 	defines { "NDEBUG", "RESULT_DIAGNOSTICS_LEVEL=0", "RESULT_INCLUDE_CALLER_RETURNADDRESS=0" }
-	symbols "Off"
+	linkoptions { "/pdbaltpath:%_PDB%" }
 
 filter "configurations:not Debug"
 	optimize "Speed"
