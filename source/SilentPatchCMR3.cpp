@@ -2738,21 +2738,23 @@ namespace NewAdvancedGraphicsOptions
 			PC_GraphicsAdvanced_PopulateFromCaps(menu, adapter, adapter);
 			PC_GraphicsAdvanced_PopulateFromCaps_NewOptions(menu, adapter, adapter);
 		}
-		if (adapter != *gnCurrentAdapter)
+		if (adapter != *gnCurrentAdapter && *gnCurrentAdapter != -1)
 		{
 			const int numDisplayModes = CMR_ValidateModeFormats(adapter);
 			menu->m_entries[EntryID::GRAPHICS_ADV_RESOLUTION].m_entryDataInt = numDisplayModes;
 			menu->m_entries[EntryID::GRAPHICS_ADV_RESOLUTION].m_value = std::max(1, numDisplayModes) - 1;
-			gnCurrentDisplayMode = -1; // Force refresh rates to update
+			gnCurrentDisplayMode = -2; // Force refresh rates to update
 		}
 		gnCurrentWindowMode = config.m_windowed;
 
 		if (displayMode != gnCurrentDisplayMode)
 		{
-			const int numRefreshRates = CMR_GetNumRefreshRates(GetMenuResolutionEntry(adapter, displayMode));
-			menu->m_entries[EntryID::GRAPHICS_ADV_REFRESHRATE].m_entryDataInt = numRefreshRates;
-			menu->m_entries[EntryID::GRAPHICS_ADV_REFRESHRATE].m_value = std::max(1, numRefreshRates) - 1;
-
+			if (gnCurrentDisplayMode != -1)
+			{
+				const int numRefreshRates = CMR_GetNumRefreshRates(GetMenuResolutionEntry(adapter, displayMode));
+				menu->m_entries[EntryID::GRAPHICS_ADV_REFRESHRATE].m_entryDataInt = numRefreshRates;
+				menu->m_entries[EntryID::GRAPHICS_ADV_REFRESHRATE].m_value = std::max(1, numRefreshRates) - 1;
+			}
 			gnCurrentDisplayMode = displayMode;
 		}
 
