@@ -2399,10 +2399,13 @@ namespace NewAdvancedGraphicsOptions
 
 	const std::vector<uint32_t>* GetRefreshRatesForMenuEntry(const MenuResolutionEntry* entry)
 	{
-		auto it = refreshRatesMap.find({entry->m_width, entry->m_height, GetBitDepth(entry->m_format)});
-		if (it != refreshRatesMap.end())
+		if (entry != nullptr)
 		{
-			return &it->second;
+			auto it = refreshRatesMap.find({entry->m_width, entry->m_height, GetBitDepth(entry->m_format)});
+			if (it != refreshRatesMap.end())
+			{
+				return &it->second;
+			}
 		}
 		return nullptr;
 	}
@@ -2708,7 +2711,7 @@ namespace NewAdvancedGraphicsOptions
 	}
 
 	static int gnCurrentWindowMode;
-	static int gnCurrentDisplayMode;
+	static int gnCurrentDisplayMode = -1;
 	int PC_GraphicsAdvanced_Handle_NewOptions(MenuDefinition* menu, uint32_t a2, int a3)
 	{
 		const int adapter = menu->m_entries[EntryID::GRAPHICS_ADV_DRIVER].m_value;
@@ -2720,6 +2723,13 @@ namespace NewAdvancedGraphicsOptions
 		{
 			PC_GraphicsAdvanced_PopulateFromCaps(menu, adapter, adapter);
 			PC_GraphicsAdvanced_PopulateFromCaps_NewOptions(menu, adapter, adapter);
+		}
+		if (adapter != *gnCurrentAdapter)
+		{
+			const int numDisplayModes = CMR_ValidateModeFormats(adapter);
+			menu->m_entries[EntryID::GRAPHICS_ADV_RESOLUTION].m_entryDataInt = numDisplayModes;
+			menu->m_entries[EntryID::GRAPHICS_ADV_RESOLUTION].m_value = std::max(1, numDisplayModes) - 1;
+			gnCurrentDisplayMode = -1; // Force refresh rates to update
 		}
 		gnCurrentWindowMode = config.m_windowed;
 
@@ -2868,7 +2878,7 @@ uint32_t CMR_GetRefreshRateIndex(const MenuResolutionEntry* entry, uint32_t refr
 uint32_t CMR_GetRefreshRateFromIndex(const MenuResolutionEntry* entry, uint32_t index)
 {
 	const auto* rates = NewAdvancedGraphicsOptions::GetRefreshRatesForMenuEntry(entry);
-	if (rates->size() > index)
+	if (rates != nullptr && rates->size() > index)
 	{
 		return (*rates)[index];
 	}
