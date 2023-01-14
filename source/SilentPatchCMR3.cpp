@@ -5730,6 +5730,16 @@ static void ApplyPatches(const bool HasRegistry)
 	TXN_CATCH();
 
 
+	// Disable teleports if an INI option is specified
+	if (HasRegistry && Registry::GetRegistryDword(Registry::ADVANCED_SECTION_NAME, Registry::NO_TELEPORTS_KEY_NAME).value_or(0) != 0) try
+	{
+		auto flash_screen_white = get_pattern("56 33 F6 39 B1", -7);
+
+		Patch<uint8_t>(flash_screen_white, 0xC3);
+	}
+	TXN_CATCH();
+
+
 	// SP text on the Start screen
 	// Make sure this is always the last patch, just in case
 	if (HasGraphics && HasCMR3Font) try
