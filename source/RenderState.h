@@ -17,18 +17,24 @@
 	m_ ## name((assert(OFFS_ ## name != SIZE_MAX), *reinterpret_cast<std::remove_reference_t<decltype(m_ ## name)>*>(reinterpret_cast<char*>(obj) + OFFS_ ## name)))
 #endif
 
-// RenderState class differs in length between regional executables :(
+// RenderState class added stencil cache in the Polish version, EFIGS/Czech don't have it
 struct RenderState;
 
 class RenderStateFacade
 {
 public:
 	using SamplerArray = std::array<DWORD, 8>;
-	FACADE_MEMBER(SamplerArray, maxAnisotropy); // 0xC8 in EFIGS, 0x108 in Polish
+	FACADE_MEMBER(DWORD, emissiveSource); // 0x88 in EFIGS, 0xBC in Polish
+	FACADE_MEMBER(DWORD, blendOp); // 0x90 in EFIGS, 0xC4 in Polish
+	FACADE_MEMBER(SamplerArray, maxAnisotropy); // 0xD8 in EFIGS, 0x10C in Polish
+	FACADE_MEMBER(SamplerArray, borderColor); // 0x358 in EFIGS, 0x38C in Polish
 
 public:
 	RenderStateFacade(RenderState* obj)
-		: INIT_FACADE_MEMBER(obj, maxAnisotropy)
+		: INIT_FACADE_MEMBER(obj, emissiveSource),
+		INIT_FACADE_MEMBER(obj, blendOp),
+		INIT_FACADE_MEMBER(obj, maxAnisotropy),
+		INIT_FACADE_MEMBER(obj, borderColor)
 	{}
 };
 

@@ -1144,6 +1144,36 @@ namespace ConditionalZWrite
 	}
 }
 
+namespace FixedWaterReflections
+{
+	static uint32_t* reinitCountdown;
+
+	static void (*orgSystem_RestoreAllDeviceObjects)();
+	void System_RestoreAllDeviceObjects_SetCountdown()
+	{
+		orgSystem_RestoreAllDeviceObjects();
+		*reinitCountdown = 5;
+	}
+
+	static void (*orgRenderState_Flush)();
+	void RenderState_Flush_RestoreMissingStates()
+	{
+		orgRenderState_Flush();
+
+		RenderStateFacade CurrentRenderStateF(CurrentRenderState);
+		IDirect3DDevice9* device = *gpd3dDevice;
+
+		// Those render states are missed by the original code
+		for (DWORD i = 0; i < 8; i++)
+		{
+			device->SetSamplerState(i, D3DSAMP_BORDERCOLOR, CurrentRenderStateF.m_borderColor[i]);
+		}
+
+		device->SetRenderState(D3DRS_EMISSIVEMATERIALSOURCE, CurrentRenderStateF.m_emissiveSource);
+		device->SetRenderState(D3DRS_BLENDOP, CurrentRenderStateF.m_blendOp);
+	}
+}
+
 namespace FileErrorMessages
 {
 	static void (*orgGraphics_Render)();
@@ -3837,8 +3867,15 @@ static void ApplyPatches(const bool HasRegistry)
 
 		// Facade initialization
 		const uintptr_t RenderStateStart = reinterpret_cast<uintptr_t>(CurrentRenderState);
-		const uintptr_t MaxAnisotropy = *get_pattern<uintptr_t>("89 1C B5 ? ? ? ? 8B 0C B5", 7 + 3);
-		RenderStateFacade::OFFS_maxAnisotropy = MaxAnisotropy - RenderStateStart;
+
+		auto set_default = pattern("89 1C B5 ? ? ? ? 8B 0C B5").get_one();
+		auto emissive_source = *get_pattern<uintptr_t>("68 94 00 00 00 E8 ? ? ? ? 89 3D", 10 + 2);
+		auto blend_op = *get_pattern<uintptr_t>("FF 91 E4 00 00 00 A1 ? ? ? ? 5F", 6 + 1);
+
+		RenderStateFacade::OFFS_emissiveSource = emissive_source - RenderStateStart;
+		RenderStateFacade::OFFS_blendOp = blend_op - RenderStateStart;
+		RenderStateFacade::OFFS_maxAnisotropy = *set_default.get<uintptr_t>(7 + 3) - RenderStateStart;
+		RenderStateFacade::OFFS_borderColor = *set_default.get<uintptr_t>(3) - RenderStateStart;
 
 		HasRenderState = true;
 	}
@@ -5153,6 +5190,46 @@ static void ApplyPatches(const bool HasRegistry)
 		InterceptCall(graphics_shadow_soften, orgGraphics_Shadows_Soften, Graphics_Shadows_Soften_DisableDepth);
 	}
 	TXN_CATCH();
+
+
+	// Fix water reflections...
+	{
+		using namespace FixedWaterReflections;
+
+		// ...not reinitializing with Alt+Tab
+		try
+		{
+			auto restore_all_device_objects = get_pattern("89 1D ? ? ? ? 89 1D ? ? ? ? E8 ? ? ? ? 5F", 12);
+			auto countdown = *get_pattern<uint32_t*>("39 2D ? ? ? ? 74 10", 2);
+
+			reinitCountdown = countdown;
+			InterceptCall(restore_all_device_objects, orgSystem_RestoreAllDeviceObjects, System_RestoreAllDeviceObjects_SetCountdown);
+		}
+		TXN_CATCH();
+
+		// ...getting a wrong render target format after a device reset
+		// (might also affect other effects, as device reset makes them lose alpha)
+		try
+		{
+			auto formats_to_set = pattern(get_pattern_uintptr("57 89 4C 24 1C 8B 56 54"), get_pattern_uintptr("89 7C 24 20 5F"), "8B ? 50").count(4);
+
+			formats_to_set.for_each_result([](pattern_match match)
+			{
+				Patch<int8_t>(match.get<void>(2), 0x4C);
+			});
+		}
+		TXN_CATCH();
+
+		// ...breaking due to cache coherency issues; restore missing several render states
+		// (might affect more effects, but water is the only known breakage)
+		if (HasCored3d && HasRenderState) try
+		{
+			auto render_state_flush_restore = get_pattern("FF 91 ? ? ? ? E8 ? ? ? ? 33 F6", 6);
+
+			InterceptCall(render_state_flush_restore, orgRenderState_Flush, RenderState_Flush_RestoreMissingStates);
+		}
+		TXN_CATCH();
+	}
 
 
 	// Make the game portable
