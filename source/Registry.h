@@ -22,7 +22,8 @@ namespace Registry
 	inline const wchar_t* DIGITAL_TACHO_KEY_NAME = L"DIGITAL_TACHO";
 
 	inline const wchar_t* ENVMAP_SKY_KEY_NAME = L"ENVMAP_SKY";
-	inline const wchar_t* ANALOG_MENU_NAV_SKY_NAME = L"ANALOG_MENU_NAV";
+	inline const wchar_t* ANALOG_MENU_NAV_KEY_NAME = L"ANALOG_MENU_NAV";
+	inline const wchar_t* SHARPER_SHADOWS_KEY_NAME = L"SHARPER_SHADOWS";
 
 	inline const wchar_t* SKIP_WARNING_KEY_NAME = L"SKIP_VERSION_WARNING";
 

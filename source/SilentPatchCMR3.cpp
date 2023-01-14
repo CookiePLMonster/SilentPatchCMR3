@@ -1084,18 +1084,25 @@ namespace UnrandomizeUnknownCodepoints
 namespace ConditionalZWrite
 {
 	static bool DisableZWrite = false;
+	static bool UseSharperShadows = true;
+
+	static void* (*orgAfterSetupTextureStages)();
+	static void* Graphics_CarMultitexture_AfterSetupTextureStages()
+	{
+		UseSharperShadows = Registry::GetRegistryDword(Registry::ADVANCED_SECTION_NAME, Registry::SHARPER_SHADOWS_KEY_NAME).value_or(1) != 0;	
+		return orgAfterSetupTextureStages();
+	}
 
 	void (*orgGraphics_Shadows_Soften)(int a1);
 	void Graphics_Shadows_Soften_DisableDepth(int a1)
 	{
 #ifndef NDEBUG
-		static bool softencmr2005 = false;
 		static bool keyPressed = false;
 		if (GetAsyncKeyState(VK_F4) & 0x8000)
 		{
 			if (!keyPressed)
 			{
-				softencmr2005 = !softencmr2005;
+				UseSharperShadows = !UseSharperShadows;
 				keyPressed = true;
 			}
 		}
@@ -1103,12 +1110,10 @@ namespace ConditionalZWrite
 		{
 			keyPressed = false;
 		}
-#else
-		constexpr bool softencmr2005 = false;
 #endif
 
 		DisableZWrite = true;
-		orgGraphics_Shadows_Soften(softencmr2005 ? 2 : a1);
+		orgGraphics_Shadows_Soften(UseSharperShadows ? 2 : a1);
 		DisableZWrite = false;
 	}
 
@@ -5121,7 +5126,7 @@ static void ApplyPatches(const bool HasRegistry)
 		auto blitter2d_unset = pattern("56 89 2D ? ? ? ? E8 ? ? ? ? 57 E8").count(6); // All except for Line2D
 		auto blitter2d_unset_line2d = get_pattern("FF 91 ? ? ? ? 56 E8 ? ? ? ? 53", 7);
 
-		auto graphics_shadow_soften = pattern("6A 08 E8 ? ? ? ? 8B 4C 24 1C").get_one();
+		auto graphics_shadow_soften = get_pattern("6A 08 E8 ? ? ? ? 8B 4C 24 1C", 2);
 
 		std::array<void*, 14> zbuffer_modes = {
 			blitter2d_set.get(0).get<void>(5), blitter2d_set.get(1).get<void>(5), blitter2d_set.get(2).get<void>(5),
@@ -5134,12 +5139,18 @@ static void ApplyPatches(const bool HasRegistry)
 			blitter2d_unset_line2d
 		};
 
+		// Only patch the switch if we have registry
+		if (HasRegistry) try
+		{
+			auto after_setup_texture_stages = get_pattern("DD D8 E8 ? ? ? ? 50 E8", 2);
+
+			InterceptCall(after_setup_texture_stages, orgAfterSetupTextureStages, Graphics_CarMultitexture_AfterSetupTextureStages);
+		}
+		TXN_CATCH();
+
 		HookEach_ConditionalSet(zbuffer_modes, InterceptCall);
 
-		InterceptCall(graphics_shadow_soften.get<void>(2), orgGraphics_Shadows_Soften, Graphics_Shadows_Soften_DisableDepth);
-
-		// Reduce soften passes from 8 to 2, like in CMR2005
-		//Patch<int8_t>(graphics_shadow_soften.get<void>(1), 2);
+		InterceptCall(graphics_shadow_soften, orgGraphics_Shadows_Soften, Graphics_Shadows_Soften_DisableDepth);
 	}
 	TXN_CATCH();
 
@@ -5198,7 +5209,7 @@ static void ApplyPatches(const bool HasRegistry)
 
 
 	// Remapped menu navigation from analog sticks to DPad
-	if ((HasRegistry && Registry::GetRegistryDword(Registry::ADVANCED_SECTION_NAME, Registry::ANALOG_MENU_NAV_SKY_NAME).value_or(0) == 0) || !HasRegistry) try
+	if ((HasRegistry && Registry::GetRegistryDword(Registry::ADVANCED_SECTION_NAME, Registry::ANALOG_MENU_NAV_KEY_NAME).value_or(0) == 0) || !HasRegistry) try
 	{
 		auto axis_type_analog = pattern("83 F8 01 75 09 83 FD FF 75 10").get_one();
 
