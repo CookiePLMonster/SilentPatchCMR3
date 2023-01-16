@@ -4695,6 +4695,16 @@ static void ApplyPatches(const bool HasRegistry)
 			// Engagement screen
 			auto engagement_screen_press_return_text1 = pattern("68 ? ? ? ? 6A 0C E8 ? ? ? ? D9 44 24").count(10);
 
+			// "McRae has won" text
+			pattern("6A ? E8 ? ? ? ? 6A 12 56").count(6).for_each_result([&](pattern_match match)
+				{
+					centered_blit_texts.emplace_back(match.get<void>(2));
+				});
+			centered_blit_texts.emplace_back(get_pattern("6A 0C E8 ? ? ? ? 8B FE", 2));
+			centered_blit_texts.emplace_back(get_pattern("6A 0C E8 ? ? ? ? E8 ? ? ? ? 33 DB", 2));
+			centered_blit_texts.emplace_back(get_pattern("6A 00 E8 ? ? ? ? 6A 12 57", 2));
+			centered_blit_texts.emplace_back(get_pattern("6A 00 E8 ? ? ? ? 55 E8 ? ? ? ? 8D 44 24 18", 2));
+
 			// Telemetry screen
 			void* telemetry_legend_boxes_centered = get_pattern("E8 ? ? ? ? 8B 15 ? ? ? ? 6A 22");
 			void* telemetry_texts_centered[] = {
@@ -4769,6 +4779,9 @@ static void ApplyPatches(const bool HasRegistry)
 			// Credits
 			centered_blit_texts.emplace_back(get_pattern("6A 0C E8 ? ? ? ? 8B 2D", 2));
 			centered_blit_texts.emplace_back(get_pattern("6A 0C E8 ? ? ? ? 8B 0D ? ? ? ? 8B 2D", 2));
+
+			// Ranking screen
+			centered_blit_texts.emplace_back(get_pattern("68 40 01 00 00 68 ? ? ? ? 6A 00 E8 ? ? ? ? 8B 44 24 0C", 12));
 
 			auto splitscreen_4th_viewport_rect2d = get_pattern("DD D8 E8 ? ? ? ? 8B 7C 24 30", 2);
 
