@@ -4600,6 +4600,18 @@ static void ApplyPatches(const bool HasRegistry)
 				{ // 0 in EFIGS/Polish, 1 in Czech
 					centered_blit_texts.emplace_back(match.get<void>(17));
 				});
+			pattern("68 40 01 00 00 68 ? ? ? ? E8 ? ? ? ? 50 6A 00 E8 ? ? ? ? 5B").count_hint(1).for_each_result([&](pattern_match match)
+				{ // 1 in EFIGS/Polish, 0 in Czech
+					centered_blit_texts.emplace_back(match.get<void>(18));
+				});
+			pattern("68 40 01 00 00 68 ? ? ? ? E8 ? ? ? ? 50 53 E8 ? ? ? ? 5F").count_hint(1).for_each_result([&](pattern_match match)
+				{ // 0 in EFIGS/Polish, 1 in Czech
+					centered_blit_texts.emplace_back(match.get<void>(17));
+				});
+			pattern("68 40 01 00 00 68 ? ? ? ? E8 ? ? ? ? 50 6A 00 E8 ? ? ? ? C2 08 00").count_hint(1).for_each_result([&](pattern_match match)
+				{ // 1 in EFIGS/Polish, 1 in Czech
+					centered_blit_texts.emplace_back(match.get<void>(18));
+				});
 	
 
 			pattern("6A 00 E8 ? ? ? ? ? 83 ? 06").count(2).for_each_result([&](pattern_match match)
