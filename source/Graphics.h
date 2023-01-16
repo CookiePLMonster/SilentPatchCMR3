@@ -385,6 +385,7 @@ void Viewport_SetDimensions(D3DViewport* viewport, int left, int top, int right,
 D3DViewport* Viewport_GetCurrent();
 
 void SetMovieDirectory_SetDimensions(const char* path);
+void MovieCreate_SetDimensions(const char* name);
 
 void RecalculateUI();
 

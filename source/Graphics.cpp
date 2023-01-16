@@ -420,12 +420,24 @@ static void RecalculateMoviesDimensions()
 void (*orgSetMovieDirectory)(const char* path);
 void SetMovieDirectory_SetDimensions(const char* path)
 {
-	// intros are pillarboxed, the rest is filled
+	// Frontend is filled, the rest is pillarboxed
 	// Movies fill the screen, cutting off the edges
-	bCurrentMoviePillarboxed = StrStrIA(path, "intros") != nullptr;
+	bCurrentMoviePillarboxed = StrStrIA(path, "frontend") == nullptr;
+	orgSetMovieDirectory(path);
+}
+
+void (*orgMovieCreate)(const char* name);
+void MovieCreate_SetDimensions(const char* name)
+{
+	// If it's attract1, enable pillarboxing regardless of where the clip is located
+	if (StrStrIA(name, "attract1") != nullptr)
+	{
+		bCurrentMoviePillarboxed = true;
+	}
 	{
 		auto Protect = ScopedUnprotect::UnprotectSectionOrFullModule( GetModuleHandle( nullptr ), ".text" );
 		RecalculateMoviesDimensions();
 	}
-	orgSetMovieDirectory(path);
+
+	orgMovieCreate(name);
 }

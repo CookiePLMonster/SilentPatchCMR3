@@ -4413,6 +4413,7 @@ static void ApplyPatches(const bool HasRegistry)
 			using namespace Graphics::Patches;
 
 			extern void (*orgSetMovieDirectory)(const char* path);
+			extern void (*orgMovieCreate)(const char* name);
 
 			std::array<void*, 2> graphics_change_recalculate_ui = {
 				get_pattern("E8 ? ? ? ? 8B 54 24 24 89 5C 24 18"),
@@ -4800,6 +4801,7 @@ static void ApplyPatches(const bool HasRegistry)
 			// Movie rendering
 			auto movie_rect = pattern("C7 05 ? ? ? ? 00 00 00 BF C7 05 ? ? ? ? 00 00 00 BF").get_one();
 			auto movie_name_setdir = get_pattern("E8 ? ? ? ? E8 ? ? ? ? 85 C0 A1 ? ? ? ? 0F 95 C3");
+			auto movie_create = get_pattern("E8 ? ? ? ? A1 ? ? ? ? 85 C0 0F 84 ? ? ? ? 84 DB");
 			UI_MovieX1 = movie_rect.get<float>(6);
 			UI_MovieY1 = movie_rect.get<float>(10 + 6);
 			UI_MovieX2 = movie_rect.get<float>(20 + 6);
@@ -4985,8 +4987,8 @@ static void ApplyPatches(const bool HasRegistry)
 
 			InjectHook(splitscreen_4th_viewport_rect2d, Core_Blitter2D_Rect2D_GT_CenterHalf);
 			
-			ReadCall(movie_name_setdir, orgSetMovieDirectory);
-			InjectHook(movie_name_setdir, SetMovieDirectory_SetDimensions);
+			InterceptCall(movie_name_setdir, orgSetMovieDirectory, SetMovieDirectory_SetDimensions);
+			InterceptCall(movie_create, orgMovieCreate, MovieCreate_SetDimensions);
 
 			OSD_Main_SetUpStructsForWidescreen();
 
