@@ -93,6 +93,16 @@ char Keyboard_ConvertScanCodeToCharLocalised(int scanCode, int shift, int capsLo
 	return ch;
 }
 
+bool Keyboard_IsKeyPressed(int keyCode)
+{
+	return gKeyboardData[keyCode] != 0;
+}
+
+bool Keyboard_WasKeyPressed(int keyCode)
+{
+	return gKeyboardData[keyCode] != 0 && gLastKeyboardData[keyCode] == 0;
+}
+
 std::filesystem::path GetPathToGameDir()
 {
     std::filesystem::path result;

@@ -16,6 +16,7 @@ inline uint32_t gResolutionWidthPixels = 640, gResolutionHeightPixels = 480;
 
 inline char* gszTempString;
 inline uint8_t* gKeyboardData;
+inline uint8_t* gLastKeyboardData;
 
 inline uint32_t (*GameInfo_GetTextLanguage)();
 inline uint32_t (*GameInfo_GetCoDriverLanguage)();
@@ -23,5 +24,7 @@ inline uint32_t (*GameInfo_GetCoDriverLanguage)();
 uint32_t GameInfo_GetTextLanguage_LocalePackCheck();
 
 char Keyboard_ConvertScanCodeToCharLocalised(int scanCode, int shift, int capsLock);
+bool Keyboard_IsKeyPressed(int keyCode);
+bool Keyboard_WasKeyPressed(int keyCode);
 
 std::filesystem::path GetPathToGameDir();

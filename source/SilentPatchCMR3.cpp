@@ -1195,6 +1195,75 @@ namespace FileErrorMessages
 	}
 }
 
+namespace HUDToggle
+{
+	static void* OSD_Main_Enable_JumpBack;
+	__declspec(naked) void OSD_Main_Enable_Original(int /*osdCar*/, int /*osdTimer*/, int /*osdProgress*/, int /*osdCodriver*/, int /*osdProximity*/)
+	{
+		__asm
+		{
+			mov		eax, [esp+4]
+			mov		ecx, [esp+8]
+			jmp		[OSD_Main_Enable_JumpBack]
+		}
+	}
+
+	static uint8_t OSDDisplayMode = 0;
+
+	// Saved "real" state, not the display one
+	static int gboOSDCarDisplay, gboOSDTimerDisplay, gboOSDProgressDisplay, gboOSDCodriverDisplay, gboNewProximityDetection;
+	void OSD_Main_Enable(int osdCar, int osdTimer, int osdProgress, int osdCodriver, int osdProximity)
+	{
+		gboOSDCarDisplay = osdCar;
+		gboOSDTimerDisplay = osdTimer;
+		gboOSDProgressDisplay = osdProgress;
+		gboOSDCodriverDisplay = osdCodriver;
+		gboNewProximityDetection = osdProximity;
+
+		if (OSDDisplayMode > 0)
+		{
+			// Keep tacho and co-driver only
+			osdTimer = 0;
+			osdProgress = 0;
+			osdProximity = 0;
+
+			if (OSDDisplayMode > 1)
+			{
+				// Disable everything
+				osdCar = 0;
+				osdCodriver = 0;
+			}
+		}
+
+		OSD_Main_Enable_Original(osdCar, osdTimer, osdProgress, osdCodriver, osdProximity);
+	}
+
+	static int (*orgCameras_GetCurrent)(int);
+	int Cameras_GetCurrent_GetToggle(int a1)
+	{
+		if (Keyboard_WasKeyPressed(63)) // DIK_F5
+		{
+			OSDDisplayMode = (OSDDisplayMode + 1) % 3;
+			OSD_Main_Enable(gboOSDCarDisplay, gboOSDTimerDisplay, gboOSDProgressDisplay, gboOSDCodriverDisplay, gboNewProximityDetection);
+		}
+
+		return orgCameras_GetCurrent(a1);
+	}
+
+	void OSD_Main_EnableCoDriverMsg(int enable)
+	{
+		if (std::exchange(gboOSDCodriverDisplay, enable) != enable)
+		{
+			OSD_Main_Enable(gboOSDCarDisplay, gboOSDTimerDisplay, gboOSDProgressDisplay, gboOSDCodriverDisplay, gboNewProximityDetection);
+		}
+	}
+
+	int OSD_Main_IsCoDriverMsgEnabled()
+	{
+		return gboOSDCodriverDisplay;
+	}
+}
+
 namespace SPText
 {
 	static std::string BuildTextInternal()
@@ -3885,10 +3954,22 @@ static void ApplyPatches(const bool HasRegistry)
 	try
 	{
 		auto draw_text_entry_box = get_pattern("56 3B C3 57 0F 84 ? ? ? ? DB 84 24", -0xD);
-		auto keyboard_data = *get_pattern<uint8_t*>("81 E2 FF 00 00 00 88 90 ? ? ? ? 40", 6 + 2);
+		auto keyboard_data = [] {
+			try
+			{
+				// EFIGS/Czech
+				return pattern("BE ? ? ? ? BF ? ? ? ? 68 ? ? ? ? F3 A5 8B 08").get_one();
+			}
+			catch (const hook::txn_exception&)
+			{
+				// Polish
+				return pattern("BE ? ? ? ? BF ? ? ? ? F3 A5 8B 08").get_one();
+			}
+		}();
 
 		Keyboard_DrawTextEntryBox = reinterpret_cast<decltype(Keyboard_DrawTextEntryBox)>(draw_text_entry_box);
-		gKeyboardData = keyboard_data;
+		gKeyboardData = *keyboard_data.get<uint8_t*>(1);
+		gLastKeyboardData = *keyboard_data.get<uint8_t*>(5 + 1);
 
 		HasKeyboard = true;
 	}
@@ -5753,6 +5834,28 @@ static void ApplyPatches(const bool HasRegistry)
 			Menus::Patches::ExtraGraphicsOptionsPatched = true;
 		}
 		TXN_CATCH();
+	}
+	TXN_CATCH();
+
+
+	// HUD toggle under F5
+	if (HasKeyboard) try
+	{
+		using namespace HUDToggle;
+
+		auto osd_main_enable = pattern("8B 44 24 04 8B 4C 24 08 8B 54 24 0C A3 ? ? ? ? 8B 44 24 10 89 0D ? ? ? ? 8B 4C 24 14").get_one();
+		auto osd_main_render = get_pattern("E8 ? ? ? ? 83 F8 03 74 61");
+
+		auto enable_codriver_msg = ReadCallFrom(get_pattern("E9 ? ? ? ? 5B C2 04 00"));
+		auto is_codriver_msg_enabled = ReadCallFrom(get_pattern("E8 ? ? ? ? 85 C0 0F 84 ? ? ? ? E8 ? ? ? ? 85 C0 0F 84 ? ? ? ? E8"));
+
+		OSD_Main_Enable_JumpBack = osd_main_enable.get<void>(8);
+		InjectHook(osd_main_enable.get<void>(), OSD_Main_Enable, PATCH_JUMP);
+
+		InterceptCall(osd_main_render, orgCameras_GetCurrent, Cameras_GetCurrent_GetToggle);
+
+		InjectHook(enable_codriver_msg, OSD_Main_EnableCoDriverMsg, PATCH_JUMP);
+		InjectHook(is_codriver_msg_enabled, OSD_Main_IsCoDriverMsgEnabled, PATCH_JUMP);
 	}
 	TXN_CATCH();
 
