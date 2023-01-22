@@ -5340,6 +5340,20 @@ static void ApplyPatches(const bool HasRegistry)
 	}
 
 
+	// Look for CMR3 save file as an exact match rather than as "file name starts with"
+	try
+	{
+		auto comparison_pattern = pattern("80 7E 01 4D 75 0C 80 7E 02 52 75 06 80 7E 03 33").get_one();
+
+		// Change a series of char comparisons into
+		// cmp dword ptr [esi+1], 33524Dh
+		// It -is- an unaligned access, but it's fine in x86
+		Patch(comparison_pattern.get<void>(), { 0x81, 0x7E, 0x01, 0x4D, 0x52, 0x33, 0x00 });
+		Nop(comparison_pattern.get<void>(7), 9);
+	}
+	TXN_CATCH();
+
+
 	// Make the game portable
 	// Removes settings from registry and reliance on INSTALL_PATH
 	if (HasRegistry) try
