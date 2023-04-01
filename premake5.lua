@@ -1,3 +1,31 @@
+-- Custom API additions START
+require('vstudio')
+
+premake.api.register {
+	name = "vcpkg",
+	scope = "config",
+	kind = "boolean"
+}
+premake.api.register {
+	name = "vcpkgmanifest",
+	scope = "config",
+	kind = "boolean"
+}
+
+premake.override(premake.vstudio.vc2010.elements, "configurationProperties", function(base, cfg)
+	local calls = base(cfg)
+	table.insert(calls, function(cfg)
+		if cfg.vcpkg ~= nil then
+			premake.w('<VcpkgEnabled>%s</VcpkgEnabled>', cfg.vcpkg)
+		end
+		if cfg.vcpkgmanifest ~= nil then
+			premake.w('<VcpkgEnableManifest>%s</VcpkgEnableManifest>', cfg.vcpkgmanifest)
+		end
+	end)
+	return calls
+end)
+-- Custom API additions END
+
 workspace "SilentPatchCMR3"
 	platforms { "Win32" }
 
@@ -9,6 +37,9 @@ project "SilentPatchCMR3"
 
 	dofile "source/VersionInfo.lua"
 	files { "**/MemoryMgr.h", "**/Patterns.*", "**/HookInit.hpp" }
+
+	-- Enable vcpkg
+	vcpkgmanifest "on"
 
 
 workspace "*"
