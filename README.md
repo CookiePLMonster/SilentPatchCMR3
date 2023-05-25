@@ -40,6 +40,7 @@ Fixes marked with ⚙️ can be configured/toggled via the INI file. The other n
 * Alt+F4 now works.
 * Removed a debug feature where invalid codepoints flickered randomly.
 * The error message displayed when the game fails to load specific game files now doesn't freeze the game and can be closed with Alt+F4.
+* Fixed an issue where the game would load a wrong save file if its multiple copies or backups were present in the game directory.
 
 ### Enhancements:
 * The game is now fully portable, as the settings have been redirected from the registry to the INI file.
@@ -48,6 +49,7 @@ Fixes marked with ⚙️ can be configured/toggled via the INI file. The other n
 * New Graphics options added: Field of View (separate for external and internal cameras), Digital Tachometer, Vertical Split-screen.
 * New Advanced Graphics options added: Windowed/borderless mode (fully resizable), Vertical Sync, Refresh Rate, Anisotropic Filtering.
 * Changed the Bonus Codes URL to point towards [a cheat generator hosted by myself](https://cookieplmonster.github.io/bonuscodes/) since the original URLs are not active anymore.
+* Added an option to toggle the HUD by pressing F5.
 
 ### Language Pack:
 * Added support for all official text translations used together - English, French, German, Spanish, Italian, Polish, and Czech.
