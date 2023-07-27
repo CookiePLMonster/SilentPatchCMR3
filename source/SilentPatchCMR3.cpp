@@ -2029,7 +2029,10 @@ namespace BetterBoxDrawing
 			rect.Y[1] = ((posY + height) * ScaleY) - HalfLineThickness;
 		}
 
-		Core_Blitter2D_Rect2D_G(rects, rectsToDraw);
+		if (rectsToDraw > 0)
+		{
+			Core_Blitter2D_Rect2D_G(rects, rectsToDraw);
+		}
 	}
 
 	void Keyboard_DrawTextEntryBox(int posX, int posY, int width, int height, unsigned int color, int fill)
@@ -2181,7 +2184,10 @@ namespace BetterBoxDrawing
 			}
 		}
 
-		Core_Blitter2D_Rect2D_G(rects, numSides);
+		if (numSides > 0)
+		{
+			Core_Blitter2D_Rect2D_G(rects, numSides);
+		}
 	}
 
 	void DrawCountdownOutline(float X1, float Y1, float X2, float Y2, unsigned int color)
