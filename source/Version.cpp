@@ -276,7 +276,12 @@ bool IsSupportedVersion()
 
 bool IsEFIGS()
 {
-	return ExecutableVersion == VERSION_EFIGS_DRMFREE || ExecutableVersion == VERSION_EFIGS_10 || ExecutableVersion == VERSION_EFIGS_11;
+	return ExecutableVersion == VERSION_EFIGS_DRMFREE || ExecutableVersion == VERSION_EFIGS_10 || ExecutableVersion == VERSION_EFIGS_11 || IsDemo();
+}
+
+bool IsDemo()
+{
+	return ExecutableVersion == VERSION_DEMO_095 || ExecutableVersion == VERSION_DEMO_10;
 }
 
 bool IsPolish()
@@ -321,7 +326,7 @@ bool HasHDUI()
 
 bool IsKnownVersion()
 {
-	return IsSupportedVersion() || ExecutableVersion == VERSION_EFIGS_10 || ExecutableVersion == VERSION_EFIGS_11 || ExecutableVersion == VERSION_POLISH_11;
+	return IsSupportedVersion() || IsDemo() || ExecutableVersion == VERSION_EFIGS_10 || ExecutableVersion == VERSION_EFIGS_11 || ExecutableVersion == VERSION_POLISH_11;
 }
 
 }

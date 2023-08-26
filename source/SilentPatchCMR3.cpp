@@ -1296,6 +1296,12 @@ namespace SPText
 		case Version::VERSION_POLISH_11:
 			text.append("1.1 Polish");
 			break;
+		case Version::VERSION_DEMO_095:
+			text.append("0.95 Demo");
+			break;
+		case Version::VERSION_DEMO_10:
+			text.append("1.0 Demo");
+			break;
 		default:
 			text.append("Unknown");
 			break;
