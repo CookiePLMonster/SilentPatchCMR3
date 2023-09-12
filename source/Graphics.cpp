@@ -1,6 +1,6 @@
 #include "Graphics.h"
 
-#include "Utils/MemoryMgr.h"
+#include "Utils/ScopedUnprotect.hpp"
 #include <cmath>
 #include <Shlwapi.h>
 

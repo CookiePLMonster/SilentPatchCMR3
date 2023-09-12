@@ -6,6 +6,7 @@
 
 #include "Utils/MemoryMgr.h"
 #include "Utils/Patterns.h"
+#include "Utils/ScopedUnprotect.hpp"
 
 #include "Destruct.h"
 #include "Globals.h"
@@ -3267,12 +3268,6 @@ static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFront
 	using namespace Memory;
 	using namespace hook::txn;
 
-	auto InterceptCall = [](void* addr, auto&& func, auto&& hook)
-	{
-		ReadCall(addr, func);
-		InjectHook(addr, hook);
-	};
-
 	// Restored languages in Polish
 	if (HasGameInfo && HasRegistry) try
 	{
@@ -3282,7 +3277,7 @@ static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFront
 
 		// Un-hardcoded English text language
 		ReadCall(get_current_language_id.get<void>(2), orgGetLanguageIDByCode);
-		InjectHook(get_current_language_id.get<void>(), GetCurrentLanguageID_Patched, PATCH_JUMP);
+		InjectHook(get_current_language_id.get<void>(), GetCurrentLanguageID_Patched, HookType::Jump);
 
 		// Un-hardcoded co-driver language
 		// Patch will probably fail pattern matches on set_defaults when used on the English executable
@@ -3294,8 +3289,8 @@ static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFront
 			auto unk_on_main_menu_start = get_pattern("75 ? 6A 02 E8 ? ? ? ? 81 C4", 4);
 
 			gCoDriverLanguage = *set_defaults.get<uint8_t*>(5 + 2);
-			InjectHook(get_codriver_language, GetCoDriverLanguage, PATCH_JUMP);
-			InjectHook(set_codriver_language, SetCoDriverLanguage, PATCH_JUMP);
+			InjectHook(get_codriver_language, GetCoDriverLanguage, HookType::Jump);
+			InjectHook(set_codriver_language, SetCoDriverLanguage, HookType::Jump);
 
 			//  mov bCoDriverLanguage, 1 -> mov bCoDriverLanguage, al
 			Patch(set_defaults.get<void>(5), { 0x90, 0xA2 });
@@ -3450,8 +3445,8 @@ static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFront
 		}
 		Patch(credits_files, &szCreditsFiles);
 
-		InjectHook(get_language_code, GetLanguageCode, PATCH_JUMP);
-		InjectHook(get_language_id_by_code, GetLanguageIDByCode, PATCH_JUMP);
+		InjectHook(get_language_code, GetLanguageCode, HookType::Jump);
+		InjectHook(get_language_id_by_code, GetLanguageIDByCode, HookType::Jump);
 
 		credits_groups.for_each_result([](pattern_match match)
 		{
@@ -3665,7 +3660,7 @@ static void ApplyMergedLocalizations(const bool HasRegistry, const bool HasFront
 			auto get_letter_name = ReadCallFrom(get_pattern("C6 06 00 E8 ? ? ? ? 84 C0", 3));
 
 			Keyboard_ConvertScanCodeToChar = static_cast<decltype(Keyboard_ConvertScanCodeToChar)>(get_letter_name);
-			InjectHook(get_keyboard_key_name, Keyboard_ConvertScanCodeToString, PATCH_JUMP);
+			InjectHook(get_keyboard_key_name, Keyboard_ConvertScanCodeToString, HookType::Jump);
 		}
 		TXN_CATCH();
 
@@ -3750,12 +3745,6 @@ static void ApplyPatches(const bool HasRegistry)
 	const HINSTANCE mainModuleInstance = GetModuleHandle(nullptr);
 
 	auto Protect = ScopedUnprotect::UnprotectSectionOrFullModule(mainModuleInstance, ".text");
-
-	auto InterceptCall = [](void* addr, auto&& func, auto&& hook)
-	{
-		ReadCall(addr, func);
-		InjectHook(addr, hook);
-	};
 
 	// Globally replace timeGetTime with a QPC-based timer
 	Timers::Setup();
@@ -4091,7 +4080,7 @@ static void ApplyPatches(const bool HasRegistry)
 		auto get_localized_string = ReadCallFrom(get_pattern("E8 ? ? ? ? 8D 56 E2"));
 
 		gpCurrentLanguage = *get_pattern<LangFile**>("89 0D ? ? ? ? B8 ? ? ? ? 5E", 2);
-		InjectHook(get_localized_string, Language_GetString, PATCH_JUMP);
+		InjectHook(get_localized_string, Language_GetString, HookType::Jump);
 
 		HasLanguageHook = true;
 	}
@@ -4182,8 +4171,8 @@ static void ApplyPatches(const bool HasRegistry)
 		Patch(mul_struct_size, {0x6B, 0xC0, sizeof(OcclusionQuery)});
 		Patch<uint8_t>(push_struct_size,  sizeof(OcclusionQuery));
 
-		InjectHook(issue_begin, OcclusionQuery_IssueBegin, PATCH_JUMP);
-		InjectHook(issue_end, OcclusionQuery_IssueEnd, PATCH_JUMP);
+		InjectHook(issue_begin, OcclusionQuery_IssueBegin, HookType::Jump);
+		InjectHook(issue_end, OcclusionQuery_IssueEnd, HookType::Jump);
 		InjectHook(get_data, OcclusionQuery_GetDataScaled);
 		InjectHook(update_state_if_finished, OcclusionQuery_UpdateStateIfFinished);
 
@@ -4191,7 +4180,7 @@ static void ApplyPatches(const bool HasRegistry)
 		// ->
 		// if (!OcclusionQuery_IsIdle(pOcclusionQuery)) return 1;
 		InjectHook(is_query_idle.get<void>(0), OcclusionQuery_IsIdle);
-		InjectHook(is_query_idle.get<void>(5 + 3 + 2), issue_query_return, PATCH_JUMP);
+		InjectHook(is_query_idle.get<void>(5 + 3 + 2), issue_query_return, HookType::Jump);
 
 		InterceptCall(calculate_color_from_occlusion, orgCalculateSunColorFromOcclusion, CalculateSunColorFromOcclusion_Clamped);
 
@@ -4203,7 +4192,7 @@ static void ApplyPatches(const bool HasRegistry)
 		InterceptCall(destroy_horizon, orgOcclusion_Destroy, Occlusion_Destroy_Hooked);
 
 		Render_RenderGameCommon1_JumpBack = render_game_common1.get<void>();
-		InjectHook(render_game_common1.get<void>(-5), Render_RenderGameCommon1_SwitchOcclusion, PATCH_JUMP);
+		InjectHook(render_game_common1.get<void>(-5), Render_RenderGameCommon1_SwitchOcclusion, HookType::Jump);
 	}
 	TXN_CATCH();
 
@@ -4214,7 +4203,7 @@ static void ApplyPatches(const bool HasRegistry)
 		using namespace Timers;
 
 		auto get_time_in_ms = Memory::ReadCallFrom(get_pattern("E8 ? ? ? ? EB 3E"));
-		InjectHook(get_time_in_ms, GetTimeInMS, PATCH_JUMP);
+		InjectHook(get_time_in_ms, GetTimeInMS, HookType::Jump);
 	}
 	TXN_CATCH();
 
@@ -4370,25 +4359,25 @@ static void ApplyPatches(const bool HasRegistry)
 
 		dword_936C0C = *Blitter2D_Rect2D_G.get<void**>(-0x50 + 4);
 		Core_Blitter2D_Rect2D_G_JumpBack = Blitter2D_Rect2D_G.get<void>(-0x50 + 8);
-		InjectHook(Blitter2D_Rect2D_G.get<void>(-0x50), Core_Blitter2D_Rect2D_G_HalfPixel, PATCH_JUMP);
+		InjectHook(Blitter2D_Rect2D_G.get<void>(-0x50), Core_Blitter2D_Rect2D_G_HalfPixel, HookType::Jump);
 
 		Core_Blitter2D_Rect2D_GT_JumpBack = reinterpret_cast<void*>(Blitter2D_Rect2D_GT + 8);
-		InjectHook(Blitter2D_Rect2D_GT, Core_Blitter2D_Rect2D_GT_HalfPixel, PATCH_JUMP);
+		InjectHook(Blitter2D_Rect2D_GT, Core_Blitter2D_Rect2D_GT_HalfPixel, HookType::Jump);
 
 		Core_Blitter2D_Quad2D_G_JumpBack = reinterpret_cast<void*>(Blitter2D_Quad2D_G + 8);
-		InjectHook(Blitter2D_Quad2D_G, Core_Blitter2D_Quad2D_G_HalfPixel, PATCH_JUMP);
+		InjectHook(Blitter2D_Quad2D_G, Core_Blitter2D_Quad2D_G_HalfPixel, HookType::Jump);
 
 		Core_Blitter2D_Quad2D_GT_JumpBack = Blitter2D_Quad2D_GT.get<void>(-0x68 + 8);
-		InjectHook(Blitter2D_Quad2D_GT.get<void>(-0x68), Core_Blitter2D_Quad2D_GT_HalfPixel, PATCH_JUMP);
+		InjectHook(Blitter2D_Quad2D_GT.get<void>(-0x68), Core_Blitter2D_Quad2D_GT_HalfPixel, HookType::Jump);
 
 		Core_Blitter2D_Line2D_G_JumpBack = Blitter2D_Line2D_G.get<void>(-0x17 + 9);
-		InjectHook(Blitter2D_Line2D_G.get<void>(-0x17), Core_Blitter2D_Line2D_G_HalfPixelAndThickness, PATCH_JUMP);
+		InjectHook(Blitter2D_Line2D_G.get<void>(-0x17), Core_Blitter2D_Line2D_G_HalfPixelAndThickness, HookType::Jump);
 		// Do not recurse into the custom function to avoid super-thick lines
 		InjectHook(Blitter2D_Line2D_G.get<void>(0x2C), Core_Blitter2D_Line2D_G_Original);
 		InjectHook(Blitter2D_Line2D_G.get<void>(0x44), Core_Blitter2D_Line2D_G_Original);
 
 		Core_Blitter3D_Line3D_G_JumpBack = Blitter3D_Line3D_G.get<void>(-0xD + 6);
-		InjectHook(Blitter3D_Line3D_G.get<void>(-0xD), Core_Blitter3D_Line3D_G_LineThickness, PATCH_JUMP);
+		InjectHook(Blitter3D_Line3D_G.get<void>(-0xD), Core_Blitter3D_Line3D_G_LineThickness, HookType::Jump);
 		// Do not recurse into the custom function
 		InjectHook(Blitter3D_Line3D_G.get<void>(0x34), Core_Blitter3D_Line3D_G_Original);
 		InjectHook(Blitter3D_Line3D_G.get<void>(0x52), Core_Blitter3D_Line3D_G_Original);
@@ -4427,7 +4416,7 @@ static void ApplyPatches(const bool HasRegistry)
 			get_pattern("D9 5C 24 38 DD D8 E8 ? ? ? ? 5F 5E 5B", 6),
 		};
 
-		InjectHook(display_selection_box, DisplaySelectionBox, PATCH_JUMP);
+		InjectHook(display_selection_box, DisplaySelectionBox, HookType::Jump);
 
 		Patch<int32_t>(car_setup_selection_box_posy, 347 + 3);
 		Patch<int8_t>(car_setup_selection_box_height, 9);
@@ -4445,7 +4434,7 @@ static void ApplyPatches(const bool HasRegistry)
 
 		if (HasKeyboard)
 		{
-			InjectHook(::Keyboard_DrawTextEntryBox, BetterBoxDrawing::Keyboard_DrawTextEntryBox, PATCH_JUMP);
+			InjectHook(::Keyboard_DrawTextEntryBox, BetterBoxDrawing::Keyboard_DrawTextEntryBox, HookType::Jump);
 		}
 
 		// Fixed HandyFunction_DrawClipped2DBox requires HandyFunction_Clip2DRect
@@ -4453,7 +4442,7 @@ static void ApplyPatches(const bool HasRegistry)
 		{
 			auto draw_clipped_2d_box = get_pattern("53 55 56 33 F6 3B C6 57 0F 84", -0xA);
 
-			InjectHook(draw_clipped_2d_box, BetterBoxDrawing::HandyFunction_DrawClipped2DBox, PATCH_JUMP);
+			InjectHook(draw_clipped_2d_box, BetterBoxDrawing::HandyFunction_DrawClipped2DBox, HookType::Jump);
 		}
 		TXN_CATCH();
 	}
@@ -4472,8 +4461,8 @@ static void ApplyPatches(const bool HasRegistry)
 
 			auto recalc_fov = pattern("D8 0D ? ? ? ? DA 74 24 30 ").get_one();
 
-			InjectHook(set_viewport, Viewport_SetDimensions, PATCH_JUMP);
-			InjectHook(set_aspect_ratios, Graphics_Viewports_SetAspectRatios, PATCH_JUMP);
+			InjectHook(set_viewport, Viewport_SetDimensions, HookType::Jump);
+			InjectHook(set_aspect_ratios, Graphics_Viewports_SetAspectRatios, HookType::Jump);
 
 			// Change the horizontal FOV instead of vertical when refreshing viewports
 			// fidiv -> fidivr and m_vertFov -> m_horFov
@@ -4922,10 +4911,10 @@ static void ApplyPatches(const bool HasRegistry)
 					set_string_extents.emplace(pattern("56 83 F8 FE 57").get_one());
 				}
 
-				InjectHook(draw_solid_background.get<void>(-0x1A), HandyFunction_Draw2DBox_Hack, PATCH_JUMP);
+				InjectHook(draw_solid_background.get<void>(-0x1A), HandyFunction_Draw2DBox_Hack, HookType::Jump);
 				HandyFunction_Draw2DBox_JumpBack = draw_solid_background.get<void>(-0x1A + 5);
 
-				InjectHook(set_string_extents->get<void>(-5), CMR3Font_SetViewport_Hack, PATCH_JUMP);
+				InjectHook(set_string_extents->get<void>(-5), CMR3Font_SetViewport_Hack, HookType::Jump);
 				CMR3Font_SetViewport_JumpBack = set_string_extents->get<void>(-5 + 5);
 			}
 
@@ -5382,15 +5371,15 @@ static void ApplyPatches(const bool HasRegistry)
 		ReadCall(get_install_string_operator_new, Patches::orgOperatorNew);
 		InjectHook(get_install_string, GetInstallString_Portable);
 
-		InjectHook(get_registry_dword, GetRegistryDword_Patch, PATCH_JUMP);
-		InjectHook(set_registry_dword, SetRegistryDword_Patch, PATCH_JUMP);
-		InjectHook(set_registry_char, SetRegistryChar_Patch, PATCH_JUMP);
+		InjectHook(get_registry_dword, GetRegistryDword_Patch, HookType::Jump);
+		InjectHook(set_registry_dword, SetRegistryDword_Patch, HookType::Jump);
+		InjectHook(set_registry_char, SetRegistryChar_Patch, HookType::Jump);
 
 		// This one is optional! Polish exe lacks it
 		try
 		{
 			auto get_registry_char = get_pattern("85 C0 75 ? 8B 4C 24 14 56 8B 74 24 1C 8D 54 24 04 57", -0x1F);
-			InjectHook(get_registry_char, GetRegistryChar_Patch, PATCH_JUMP);
+			InjectHook(get_registry_char, GetRegistryChar_Patch, HookType::Jump);
 		}
 		TXN_CATCH();
 	}
@@ -5485,7 +5474,7 @@ static void ApplyPatches(const bool HasRegistry)
 
 			Patch(nop_adjust_windowrect, &pAdjustWindowRectEx_NOP);
 			Patch(find_window_ex, &pFindWindowExA_IgnoreWindowName);
-			InjectHook(create_class_and_window, CreateClassAndWindow, PATCH_JUMP);
+			InjectHook(create_class_and_window, CreateClassAndWindow, HookType::Jump);
 			InterceptCall(graphics_initialise, orgGraphics_Initialise, Graphics_Initialise_NewOptions);
 
 			HookEach_Graphics_Change(graphics_change, InterceptCall);
@@ -5507,10 +5496,10 @@ static void ApplyPatches(const bool HasRegistry)
 
 			guSSChanges = *reinterpret_cast<int**>(set_sampler_state + 2);
 			RenderState_SetSamplerState_JumpBack = reinterpret_cast<void*>(set_sampler_state + 6);
-			InjectHook(set_sampler_state, RenderState_SetSamplerState_Fallback, PATCH_JUMP);
+			InjectHook(set_sampler_state, RenderState_SetSamplerState_Fallback, HookType::Jump);
 
 			InterceptCall(render_game_common1_set_af, orgMarkProfiler, MarkProfiler_SetAF);
-			InjectHook(get_filtering_method_for_3d, GetAnisotropicFilter, PATCH_JUMP);
+			InjectHook(get_filtering_method_for_3d, GetAnisotropicFilter, HookType::Jump);
 			InterceptCall(set_mip_bias_and_anisotropic, orgSetMipBias, Texture_SetMipBiasAndAnisotropic);
 
 			HookEach_UpdatePresentationParameters(update_presentation_parameters, InterceptCall);
@@ -5652,15 +5641,15 @@ static void ApplyPatches(const bool HasRegistry)
 				menu_locals.emplace_back(shadows_on_adapter_change.get<void>(0x3E + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_visibilityAndName));
 			}
 
-			InjectHook(advanced_graphics_load_settings, PC_GraphicsAdvanced_LoadSettings, PATCH_JUMP);
-			InjectHook(advanced_graphics_save_settings, PC_GraphicsAdvanced_SaveSettings, PATCH_JUMP);
+			InjectHook(advanced_graphics_load_settings, PC_GraphicsAdvanced_LoadSettings, HookType::Jump);
+			InjectHook(advanced_graphics_save_settings, PC_GraphicsAdvanced_SaveSettings, HookType::Jump);
 
-			InjectHook(set_graphics_from_preset, PC_GraphicsAdvanced_SetGraphicsFromPresetQuality, PATCH_JUMP);
+			InjectHook(set_graphics_from_preset, PC_GraphicsAdvanced_SetGraphicsFromPresetQuality, HookType::Jump);
 
 			menu_locals.emplace_back(graphics_advanced_enter.get<void>(0x22 + 2), offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_ADV_SHADOWS].m_value));
 
-			InjectHook(graphics_advanced_enter.get<void>(0x3B), PC_GraphicsAdvanced_Enter_NewOptions, PATCH_JUMP);
-			InjectHook(graphics_advanced_select, PC_GraphicsAdvanced_Select_NewOptions, PATCH_JUMP);
+			InjectHook(graphics_advanced_enter.get<void>(0x3B), PC_GraphicsAdvanced_Enter_NewOptions, HookType::Jump);
+			InjectHook(graphics_advanced_select, PC_GraphicsAdvanced_Select_NewOptions, HookType::Jump);
 
 			for (void* addr : fsaa_globals_value)
 			{
@@ -5707,7 +5696,7 @@ static void ApplyPatches(const bool HasRegistry)
 			}
 
 			PC_GraphicsAdvanced_Handle_JumpBack = advanced_graphics_handle_hook.get<void>(7);
-			InjectHook(advanced_graphics_handle_hook.get<void>(), PC_GraphicsAdvanced_Handle_NewOptions, PATCH_JUMP);
+			InjectHook(advanced_graphics_handle_hook.get<void>(), PC_GraphicsAdvanced_Handle_NewOptions, HookType::Jump);
 
 			Menus::Patches::ExtraAdvancedGraphicsOptionsPatched = true;
 		}
@@ -5854,8 +5843,8 @@ static void ApplyPatches(const bool HasRegistry)
 
 			Patch<uint32_t>(back_locals, offsetof(MenuDefinition, m_entries[EntryID::GRAPHICS_BACK]));
 
-			InjectHook(graphics_enter_new_options, PC_GraphicsOptions_Enter_NewOptions, PATCH_JUMP);
-			InjectHook(graphics_exit_new_options, PC_GraphicsOptions_Exit_NewOptions, PATCH_JUMP);
+			InjectHook(graphics_enter_new_options, PC_GraphicsOptions_Enter_NewOptions, HookType::Jump);
+			InjectHook(graphics_exit_new_options, PC_GraphicsOptions_Exit_NewOptions, HookType::Jump);
 
 			Menus::Patches::ExtraGraphicsOptionsPatched = true;
 		}
@@ -5876,12 +5865,12 @@ static void ApplyPatches(const bool HasRegistry)
 		auto is_codriver_msg_enabled = ReadCallFrom(get_pattern("E8 ? ? ? ? 85 C0 0F 84 ? ? ? ? E8 ? ? ? ? 85 C0 0F 84 ? ? ? ? E8"));
 
 		OSD_Main_Enable_JumpBack = osd_main_enable.get<void>(8);
-		InjectHook(osd_main_enable.get<void>(), OSD_Main_Enable, PATCH_JUMP);
+		InjectHook(osd_main_enable.get<void>(), OSD_Main_Enable, HookType::Jump);
 
 		InterceptCall(osd_main_render, orgCameras_GetCurrent, Cameras_GetCurrent_GetToggle);
 
-		InjectHook(enable_codriver_msg, OSD_Main_EnableCoDriverMsg, PATCH_JUMP);
-		InjectHook(is_codriver_msg_enabled, OSD_Main_IsCoDriverMsgEnabled, PATCH_JUMP);
+		InjectHook(enable_codriver_msg, OSD_Main_EnableCoDriverMsg, HookType::Jump);
+		InjectHook(is_codriver_msg_enabled, OSD_Main_IsCoDriverMsgEnabled, HookType::Jump);
 	}
 	TXN_CATCH();
 
